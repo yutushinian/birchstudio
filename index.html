@@ -84,7 +84,6 @@
         <a onclick="openMyOrders();return false;"><i>📦</i><span>我的订单</span><small>查看订单与物流状态</small></a>
         <a onclick="openFortune();return false;"><i>🎋</i><span>抽一签</span><small>每日一签，顺心如意</small></a>
         <a onclick="openAnswerBook();return false;"><i>📖</i><span>答案之书</span><small>困惑之时，问它一问</small></a>
-        <a onclick="openWheel();return false;"><i>🎁</i><span>转盘优惠</span><small>好运转盘，赢取福利</small></a>
         <a onclick="openJoinUs();return false;"><i>🤝</i><span>加入我们</span><small>合作、招募、共赢</small></a>
         <a onclick="openCustomContact();return false;"><i>💬</i><span>联系定制</span><small>一对一专属服务</small></a>
         <a onclick="openBuy();return false;"><i>📞</i><span>联系我们</span><small>微信咨询 · 专属服务</small></a>
@@ -220,7 +219,6 @@
           <button class="b-func" type="button" onclick="openMyOrders()"><i>📦</i><b>我的订单</b><small>查看订单与物流</small></button>
           <button class="b-func" type="button" onclick="openFortune()"><i>🎋</i><b>抽一签</b><small>每日一签，顺心如意</small></button>
           <button class="b-func" type="button" onclick="openAnswerBook()"><i>📖</i><b>答案之书</b><small>困惑之时，问它一问</small></button>
-          <button class="b-func" type="button" onclick="openWheel()"><i>🎁</i><b>转盘优惠</b><small>好运转盘，赢取福利</small></button>
           <button class="b-func" type="button" onclick="openJoinUs()"><i>🤝</i><b>加入我们</b><small>合作、招募、共赢</small></button>
         </div>
       </div>
@@ -540,7 +538,6 @@
             <h4>随心体验</h4>
             <a onclick="openFortune();return false;">抽一签</a>
             <a onclick="openAnswerBook();return false;">答案之书</a>
-            <a onclick="openWheel();return false;">转盘优惠</a>
             <a onclick="openJoinUs();return false;">加入我们</a>
           </div>
           <div class="b-footer-col">
@@ -937,11 +934,6 @@
                 <div class="admin-card-name">活动通知</div>
               </div>
             </div>
-            <div class="admin-card" onclick="openAdminSection('secWheel')">
-              <div class="admin-card-cover"><span class="admin-chip">🎁</span></div>
-              <div class="admin-card-info">
-                <div class="admin-card-name">转盘优惠</div>
-              </div>
             </div>
             <div class="admin-card" onclick="openAdminSection('secJoin')">
               <div class="admin-card-cover"><span class="admin-chip">🤝</span></div>
@@ -1219,20 +1211,6 @@
           <h3 style="margin-bottom:16px;color:var(--text-dark)">📢 活动通知（首页左侧轮播卡片下方展示）</h3>
           <div class="form-item"><label>通知内容（留空则不显示）</label><textarea id="noticeTextInput" placeholder="例如：七夕限定手串 8 折，联系微信详询"></textarea></div>
           <button class="btn" onclick="saveNotice()">保存活动通知</button>
-        </div>
-        <div class="admin-section-page" id="secWheel">
-          <button class="back-btn" onclick="goBackAdmin()">← 返回</button>
-          <h3 style="margin-bottom:16px;color:var(--text-dark)">🎁 转盘优惠配置</h3>
-          <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">设置立减最小值~最大值（四档金额自动均分），以及各档概率（合计需 100%）</p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-            <div class="form-item" style="margin-bottom:0;"><label>立减最小值（¥）</label><input id="wheelMin" type="number" placeholder="28"></div>
-            <div class="form-item" style="margin-bottom:0;"><label>立减最大值（¥）</label><input id="wheelMax" type="number" placeholder="88"></div>
-            <div class="form-item" style="margin-bottom:0;"><label>概率1（%）</label><input id="wheelP1" type="number" placeholder="25"></div>
-            <div class="form-item" style="margin-bottom:0;"><label>概率2（%）</label><input id="wheelP2" type="number" placeholder="25"></div>
-            <div class="form-item" style="margin-bottom:0;"><label>概率3（%）</label><input id="wheelP3" type="number" placeholder="25"></div>
-            <div class="form-item" style="margin-bottom:0;"><label>概率4（%）</label><input id="wheelP4" type="number" placeholder="25"></div>
-          </div>
-          <button class="btn" onclick="saveWheel()">保存优惠配置</button>
         </div>
         <div class="admin-section-page" id="secJoin">
           <button class="back-btn" onclick="goBackAdmin()">← 返回</button>
@@ -1550,22 +1528,6 @@
       </div>
     </div>
   </div>
-  <!-- 转盘优惠弹窗 -->
-  <div class="modal-mask" id="wheelModal" onclick="closeWheel()">
-    <div class="modal-box" style="text-align:center;" onclick="event.stopPropagation()">
-      <h3>🎁 购买享优惠</h3>
-      <p style="font-size:13px;color:var(--text-light);margin:10px 0;">转动幸运转盘，随机立减 <strong id="wheelModalRange" style="color:var(--danger-red);">¥28~88</strong>
-      </p>
-      <div style="position:relative;width:220px;height:220px;margin:12px auto;">
-        <div class="wheel" id="wheel"></div>
-        <div class="wheel-arrow">▼</div>
-      </div>
-      <button class="btn" onclick="spinWheel()">转动幸运转盘</button>
-      <div id="wheelResult" style="display:none;margin-top:12px;"></div>
-      <button style="margin-top:14px;padding:12px;border:none;border-radius:10px;background:#e0ede7;color:var(--text-dark);width:100%;"
-        onclick="closeWheel()">关闭</button>
-    </div>
-  </div>
   <!-- 立即购买弹窗 -->
   <div class="modal-mask" id="buyModal" onclick="closeBuyModal()">
     <div class="modal-box" style="text-align:left;max-width:370px;" onclick="event.stopPropagation()">
@@ -1584,7 +1546,6 @@
             <div style="font-size:12px;color:var(--text-light);">折后实付</div>
             <strong id="buyFinalPrice" style="color:var(--danger-red);font-size:24px;"></strong>
           </div>
-          <button class="btn btn-light" style="width:auto;padding:8px 14px;font-size:12px;" onclick="openWheel()">🎡 幸运立减</button>
         </div>
         <div id="buyQtyRow" style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
           <span style="font-size:13px;color:var(--text-dark);">数量</span>
