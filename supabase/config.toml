@@ -1,12 +1,10 @@
 project_id = "cplyzukenqxdwhfivlqx"
 
+# 允许匿名/游客直接调用（前端不需要登录即可使用邮件与 AI 函数）
 [functions.email-send]
 verify_jwt = false
 
 [functions.birch-ai]
-verify_jwt = false
-
-[functions.birch-probe]
 verify_jwt = false
 
 [functions.admin-api]
