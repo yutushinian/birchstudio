@@ -4,7 +4,7 @@ project_id = "cplyzukenqxdwhfivlqx"
 [functions.email-send]
 verify_jwt = false
 
-[functions.ai-assistant]
+[functions.birch-ai]
 verify_jwt = false
 
 [functions.admin-api]
