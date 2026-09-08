@@ -44,7 +44,7 @@
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   var SUPABASE_URL = get('SUPABASE_URL') || '';
   var SUPABASE_ANON = get('SUPABASE_ANON_KEY') || '';
-  var AI_DEFAULT_URL = (SUPABASE_URL ? SUPABASE_URL.replace(/\/$/, '') : '') + '/functions/v1/ai-assistant';
+  var AI_DEFAULT_URL = (SUPABASE_URL ? SUPABASE_URL.replace(/\/$/, '') : '') + '/functions/v1/birch-ai';
   var CFG_KEY = 'birch_share_discount';
   var LOCAL_KEY = 'birch3_shares_v1';
 
@@ -758,7 +758,7 @@
         var cfg = null;
         try { cfg = get('aiConfig'); } catch (e) {}
         var fu = cfg && cfg.funcUrl ? cfg.funcUrl : '';
-        if (fu && !/ai-assistant/i.test(fu)) {
+        if (fu && !/ai-assistant|birch-ai/i.test(fu)) {
           return origAiDesign.call(window, mode);
         }
         return aiDesignNew(mode);
