@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>轻触白桦 · NFC</title>
+<meta name="description" content="白桦作品 NFC 轻触：抽一下、答案之书、幸运转盘、橱窗。写评论并同意授权分享可登记立减。">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .nf{max-width:600px;margin:0 auto}
+  .hero small{display:block;margin-top:8px;letter-spacing:.14em}
+  .pane{background:rgba(255,255,255,.85);border:1px solid var(--line);border-radius:16px;padding:16px;margin-top:14px}
+  .bts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .bts button,.bts a{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 8px;text-align:center;
+    text-decoration:none;color:var(--ink);cursor:pointer;font-size:14px}
+  .bts b{display:block;font-size:15px;color:var(--green);margin-top:4px}
+  .st{font-size:13px;color:var(--ink2);min-height:20px;line-height:1.8;margin-top:8px}
+  textarea{width:100%;min-height:74px;border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff;
+    color:var(--ink);font-size:13px;resize:none;box-sizing:border-box}
+  .a2{width:100%;padding:12px 0;border:none;border-radius:12px;background:var(--green);color:#fff;font-size:15px;cursor:pointer;margin-top:8px}
+  .wheel{position:relative;width:min(260px,80vw);margin:8px auto}
+  .wheel .disc{width:100%;aspect-ratio:1/1;border-radius:50%;border:6px solid #fff;box-shadow:0 6px 18px rgba(0,0,0,.2);
+    background:conic-gradient(#c9a96e 0 25%,#4a7c59 25% 50%,#8fb3a0 50% 75%,#a9745a 75% 100%);
+    transition:transform 4.2s cubic-bezier(.16,.84,.22,1);position:relative}
+  .wheel .pt{position:absolute;top:-8px;left:50%;transform:translateX(-50%);color:var(--green);font-size:20px;z-index:2}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <a class="brand" href="index.html">白桦 · BIRCH</a>
+  <nav><a href="index.html">首页</a><a href="gallery.html">臻品橱窗</a><a href="studio.html">测石定制</a><a href="verify.html">官方验证</a></nav>
+</div></header>
+
+<section class="hero"><h1>轻触白桦</h1><p>每一枚作品都有对应它的码 · 碰一碰开始</p>
+  <small id="who"></small></section>
+
+<section class="sec"><div class="wrap nf">
+  <div class="pane" id="p0">
+    <input id="q" placeholder="输入作品官方码（ID），如 MSDL2V8W-EFNU0K" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid var(--line);border-radius:12px">
+    <div class="bts"><button onclick="loc()">读取作品</button><a href="gallery.html">看看橱窗</a></div>
+  </div>
+  <div class="pane" id="p1" style="display:none">
+    <div id="pname" style="font-family:var(--serif);font-size:18px;color:var(--green)"></div>
+    <div id="pmeta" style="font-size:12px;color:var(--ink2);margin:4px 0 6px"></div>
+    <div id="pidea" style="font-size:13px;color:var(--ink2);line-height:1.9"></div>
+    <div class="bts">
+      <button onclick="toast('抽一签：'+Q[Math.floor(Math.random()*Q.length)])"><b>🎋 抽一下</b><small>拈一句此刻的光语</small></button>
+      <button onclick="toast('答案之书：'+A[Math.floor(Math.random()*A.length)])"><b>📖 答案之书</b><small>翻一页看看</small></button>
+      <button id="whBtn"><b>🎡 幸运转盘</b><small>转一次 · 登记立减</small></button>
+      <a href="gallery.html"><b>🛍️ 臻品橱窗</b><small>浏览更多</small></a>
+    </div>
+    <div class="wheel" id="whBox" style="display:none">
+      <div class="pt">▼</div><div class="disc" id="disc"></div>
+      <div style="text-align:center;margin-top:8px"><button class="a2" id="spin" style="max-width:220px">转 动</button></div>
+    </div>
+    <div class="st" id="st"></div>
+    <textarea id="cmt" placeholder="写一句此刻想说的评论（选填）…"></textarea>
+    <button class="a2" id="authBtn">同意授权分享 · 登记立减</button>
+  </div>
+</div></section>
+
+<footer class="foot"><div class="wrap">白桦水晶定制工作室 · 本页不含线上购买</div></footer>
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+<script>
+var Q=['心向开阔处，自有光来','先照亮自己，再谈遇见','你等的不是别人，是自己的决定','慢一点，光也在等你'];
+var A=['现在不是回答的时刻，是积蓄的时刻','再等等，答案会自己浮出来','听自己的第一直觉','把门留一条缝，光会进来'];
+var CUR=null, PRIZE=0, rot=0;
+function $(id){return document.getElementById(id);}
+function toast(t){var s=$('st');if(s)s.innerHTML=t;}
+function loc(){
+  var c=$('q').value.trim(); if(!c){toast('请输入官方码');return;}
+  sbB('records?select=*&id=eq.'+encodeURIComponent(c)).then(function(rs){
+    var r=rs&&rs[0]; if(!r){toast('未找到该官方码');return;}
+    CUR=r; $('p0').style.display='none'; $('p1').style.display='block';
+    $('pname').textContent=r.product_name||'白桦定制';
+    $('pmeta').textContent='专属编号：'+(r.batch_no||'—')+' · 官方码：'+r.id;
+    $('pidea').textContent=r.message&&r.message!=='生成防伪码自动创建'?r.message:'愿它陪你。';
+  }).catch(function(){toast('读取失败，请稍后再试');});
+}
+$('whBtn').addEventListener('click',function(){
+  $('whBox').style.display='block';
+  if(CUR&&localStorage.getItem('birchspin_'+CUR.id)){$('st').innerHTML='这枚作品已经转过一次 ✦ 每枚作品仅一次机会。';}
+});
+$('spin').addEventListener('click',function(){
+  if(!CUR||localStorage.getItem('birchspin_'+CUR.id)){toast('每枚作品仅一次机会');return;}
+  PRIZE=[28,48,68,88][Math.floor(Math.random()*4)];
+  rot+=360*6+(Math.floor(Math.random()*4)*90+45);
+  $('disc').style.transform='rotate('+rot+'deg)';
+  var btn=$('spin');btn.disabled=true;
+  setTimeout(function(){btn.disabled=false;localStorage.setItem('birchspin_'+CUR.id,'1');toast('转到了：立减 ¥'+PRIZE+' ✦ 写评论并同意授权后登记返现');},4400);
+});
+$('authBtn').addEventListener('click',function(){
+  var b=$('authBtn');
+  if(!CUR||!PRIZE){toast('请先转动幸运转盘');return;}
+  b.disabled=true;b.textContent='发送中…';
+  var comment=$('cmt').value.trim();
+  var row={code:CUR.id,name:CUR.product_name,batch:CUR.batch_no,idea:(CUR.message&&CUR.message!=='生成防伪码自动创建')?CUR.message:'',img:CUR.image_url,comment:comment,discount:PRIZE,consent:true};
+  var cfg=window.BIRCH; var done=function(){toast('✓ 已授权并登记立减 ¥'+PRIZE+'（回执已发后台邮箱）；评论将作为弹幕在分享区播放');b.textContent='✓ 已完成';};
+  var ins=(cfg&&cfg.anon!=='ANON_KEY_HERE')?fetch(cfg.url+'/rest/v1/shares',{method:'POST',headers:{apikey:cfg.anon,Authorization:'Bearer '+cfg.anon,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(row)}).then(function(){done();}).catch(function(){toast('上传失败，请稍后再试');b.disabled=false;b.textContent='同意授权分享 · 登记立减';}):toast('桦库未配置');
+});
+(function(){var qp=new URLSearchParams(location.search),c=qp.get('c');if(c){$('q').value=c;loc();}})();
+</script>
+</body>
+</html>
