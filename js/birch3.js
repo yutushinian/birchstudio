@@ -665,7 +665,9 @@
     var size = get('braceletSize');
     var mm = size === 10 ? 10 : 8;
     window.aiStartTime = Date.now();
-    call('showLoading', ['小桦正在为您设计并出图', 'ai']);
+    call('showLoading', ['小桦正在生成 AI 定制方案与效果图\n（约需 1 分钟，请稍候）', 'ai']);
+    var tip0 = $('b3AiQuickTip');
+    if (tip0) tip0.textContent = '⏳ AI 生成中…（约 1 分钟，请勿关闭页面）';
     try {
       var res = await fetch(fu, {
         method: 'POST',
@@ -724,6 +726,14 @@
           imgHtml +
           '<div style="font-size:10px;color:var(--text-light);margin-top:8px;">以上分析为文化意象参考 · 不构成任何承诺</div>' +
           '</div>';
+        /* 生成后自动滚到效果图 */
+        try {
+          setTimeout(function () {
+            if (o && o.scrollIntoView) { try { o.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { o.scrollIntoView(); } }
+          }, 400);
+        } catch (e) {}
+        var tip2 = $('b3AiQuickTip');
+        if (tip2) tip2.textContent = '✅ 已生成：效果图在上方 ↑ 可点图放大';
       }
       /* 按 DeepSeek 配比刷新手串预览 */
       var cb = call('clearBracelet', []);
@@ -786,6 +796,60 @@
   /* ============================================================
    * 启动
    * ============================================================ */
+  /* ---- 手机端「AI 定制」快捷条：吸顶常驻，不再翻来翻去 ---- */
+  function curAIMode() {
+    var b = $('custBirth'), h = $('custHex'), r = $('custRandom');
+    if (b && b.style && b.style.display !== 'none') return 'bazi';
+    if (h && h.style && h.style.display !== 'none') return 'hex';
+    if (r && r.style && r.style.display !== 'none') return 'random';
+    return null;
+  }
+  var __b3QuickInited = false;
+  function initCustomizeQuick() {
+    if (__b3QuickInited) return;
+    __b3QuickInited = true;
+    var p = $('customizePanel');
+    if (!p) { setTimeout(initCustomizeQuick, 600); return; }
+    if (!$('b3AiQuick')) {
+      var bar = document.createElement('div');
+      bar.id = 'b3AiQuick';
+      bar.className = 'b3-ai-quick';
+      bar.innerHTML = '<button class="b3-aiq-btn" id="b3AiQuickBtn" type="button">' +
+        '<span style="font-size:16px;line-height:1.3;">✨ AI 智能定制</span>' +
+        '<span class="b3-aiq-tip" id="b3AiQuickTip"></span></button>' +
+        '<a class="b3-aiq-contact" id="b3AiQuickContact" href="javascript:void 0">💬 联系</a>';
+      var grid = p.querySelector('.customize-grid');
+      if (grid) p.insertBefore(bar, grid); else p.appendChild(bar);
+      $('b3AiQuickBtn').onclick = function () {
+        var mode = curAIMode();
+        if (!mode) { toast('请先切换到 生辰 / 摇卦 / 随缘 任一模式'); return; }
+        var tip = $('b3AiQuickTip');
+        if (tip) tip.textContent = '⏳ AI 生成中…（约 1 分钟，请勿关闭页面）';
+        try { window.oneClickConfig(mode); } catch (e) { toast('启动 AI 失败：' + (e && e.message || e)); }
+      };
+      var ct = $('b3AiQuickContact');
+      if (ct) ct.onclick = function () { try { call('openCustomContact', []); } catch (e) {} };
+    }
+    function updTip() {
+      var tip = $('b3AiQuickTip');
+      if (!tip) return;
+      var mode = curAIMode();
+      if (mode === 'bazi') tip.textContent = '生辰测石 · 先点「测算喜用」再按 AI（约 1 分钟）';
+      else if (mode === 'hex') tip.textContent = '摇卦定制 · 先点「摇卦」再按 AI（约 1 分钟）';
+      else if (mode === 'random') tip.textContent = '随缘搭配 · 一键 AI 设计 + 出图（约 1 分钟）';
+      else tip.textContent = '手动模式 · 可切到 生辰 / 摇卦 / 随缘 使用 AI';
+    }
+    updTip();
+    var oSM = window.startCustomizeMode;
+    if (typeof oSM === 'function' && !window.__b3SMwrapped) {
+      window.__b3SMwrapped = 1;
+      window.startCustomizeMode = function (m) {
+        var ret = oSM.apply(window, arguments);
+        setTimeout(updTip, 90);
+        return ret;
+      };
+    }
+  }
   function makeFab() {
     if ($('b3Fab')) return;
     var fab = document.createElement('button');
@@ -801,6 +865,7 @@
     started = true;
     if (!document.body) { setTimeout(init, 200); return; }
     try { makeFab(); } catch (e) {}
+    try { initCustomizeQuick(); } catch (e) {}
     try { ensureAdminUI(); } catch (e) {}
     try { watchVerifyResult(); } catch (e) {}
     try { cleanBuy(); } catch (e) {}
