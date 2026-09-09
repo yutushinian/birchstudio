@@ -643,7 +643,9 @@
     var fu = AI_DEFAULT_URL || '';
     try {
       var cfg = get('aiConfig');
-      if (cfg && cfg.funcUrl) fu = cfg.funcUrl;
+      // 只信任指向 birch-ai / ai-assistant 的旧配置；其余（含旧 ai-design）一律用默认 birch-ai，
+      // 避免把请求发给无 design 模式的老函数（报“缺少问题内容”）
+      if (cfg && cfg.funcUrl && /birch-ai|ai-assistant/i.test(cfg.funcUrl)) fu = cfg.funcUrl;
     } catch (e) {}
     var kind = mode === 'hex' ? 'hex' : mode === 'bazi' ? 'bazi' : 'free';
     var info = {};
@@ -756,14 +758,11 @@
   function mmTotal(mm) { return mm >= 10 ? 18 : 22; }
   function hookAi() {
     if (typeof origAiDesign === 'function') {
+      /* 三种模式一律走新 birch-ai design；不再把旧地址(如 ai-design)当老路径转发，
+         老函数没有 design 模式只会报“缺少问题内容” */
       window.aiDesign = function (mode) {
-        var cfg = null;
-        try { cfg = get('aiConfig'); } catch (e) {}
-        var fu = cfg && cfg.funcUrl ? cfg.funcUrl : '';
-        if (fu && !/ai-assistant|birch-ai/i.test(fu)) {
-          return origAiDesign.call(window, mode);
-        }
-        return aiDesignNew(mode);
+        if (mode === 'bazi' || mode === 'hex' || mode === 'random') return aiDesignNew(mode);
+        return origAiDesign.call(window, mode);
       };
     }
     /* 接管「智能搭配」按钮：三种模式无条件走新 AI（birch-ai design），
@@ -773,10 +772,7 @@
       window.oneClickConfig = function (mode) {
         if (mode === 'bazi' || mode === 'hex' || mode === 'random') {
           try {
-            var cfg = get('aiConfig') || {};
-            var fu = cfg && cfg.funcUrl ? cfg.funcUrl : '';
-            var useNew = !fu || /ai-assistant|birch-ai/i.test(fu);
-            if (useNew && typeof window.aiDesign === 'function') {
+            if (typeof window.aiDesign === 'function') {
               window.aiDesign(mode);
               return;
             }
