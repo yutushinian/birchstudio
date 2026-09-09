@@ -612,6 +612,35 @@
     }
   }
 
+  /* ---- 文案修正：联系购买 → 联系我们（全局实时，含动态渲染） ---- */
+  var textFixOn = false;
+  function fixContactText() {
+    var HIT = '联系购买', REP = '联系我们';
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+    var n;
+    var changed = false;
+    while ((n = walker.nextNode())) {
+      if (n.nodeValue && n.nodeValue.indexOf(HIT) > -1) {
+        n.nodeValue = n.nodeValue.split(HIT).join(REP);
+        changed = true;
+      }
+    }
+    if (changed) {
+      /* 标题/按钮若整段被替换为空则回退(保险) */
+      return true;
+    }
+    return false;
+  }
+  function startTextFix() {
+    if (textFixOn) return;
+    textFixOn = true;
+    try { fixContactText(); } catch (e) {}
+    try {
+      new MutationObserver(function () { try { fixContactText(); } catch (e) {} })
+        .observe(document.body, { childList: true, subtree: true, characterData: true });
+    } catch (e) {}
+  }
+
   /* ============================================================
    * AI 生辰测石适配：ai-assistant（DeepSeek → 通义出图）
    * ============================================================ */
@@ -865,6 +894,7 @@
     started = true;
     if (!document.body) { setTimeout(init, 200); return; }
     try { makeFab(); } catch (e) {}
+    try { startTextFix(); } catch (e) {}
     try { initCustomizeQuick(); } catch (e) {}
     try { ensureAdminUI(); } catch (e) {}
     try { watchVerifyResult(); } catch (e) {}
