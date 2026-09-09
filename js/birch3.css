@@ -136,6 +136,9 @@
  * 手机端「生辰测石 / AI 定制」布局优化（birch3）
  * ============================================================ */
 
+/* 珍品橱窗：删掉小购物车按钮（已不做线上下单） */
+.gallery-add,.lp-add,.gallery-cart,.lp-cart{display:none!important}
+
 /* AI 快捷条：吸顶常驻，翻看面板时永远够得到 */
 .b3-ai-quick{display:none}
 .b3-ai-quick .b3-aiq-btn{
