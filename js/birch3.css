@@ -131,3 +131,61 @@
   .b3-panel{width:96vw;border-radius:16px}
   .b3-arow{flex-direction:column}
 }
+
+/* ============================================================
+ * 手机端「生辰测石 / AI 定制」布局优化（birch3）
+ * ============================================================ */
+
+/* AI 快捷条：吸顶常驻，翻看面板时永远够得到 */
+.b3-ai-quick{display:none}
+.b3-ai-quick .b3-aiq-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;flex:1;
+  border:none;border-radius:14px;padding:14px 12px;
+  background:linear-gradient(135deg,#e8b84a,#c9933a);color:#fff;
+  font-size:15.5px;font-weight:800;letter-spacing:.04em;cursor:pointer;
+  box-shadow:0 8px 20px rgba(201,147,58,.35);transition:transform .2s;
+}
+.b3-ai-quick .b3-aiq-btn:active{transform:scale(.97)}
+.b3-ai-quick .b3-aiq-tip{display:block;font-size:11px;font-weight:500;color:#7c6a45;margin-top:4px;letter-spacing:.02em}
+.b3-ai-quick .b3-aiq-contact{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  margin-left:8px;border:1px solid rgba(74,124,89,.45);background:#fff;
+  color:#2f5c40;border-radius:12px;padding:10px 12px;font-size:13px;font-weight:600;text-decoration:none;
+}
+@media(max-width:720px){
+  /* 快捷条常驻吸顶 */
+  .b3-ai-quick{display:flex;align-items:center;gap:0;position:sticky;top:0;z-index:70;
+    padding:10px 12px;margin:-6px -4px 8px;
+    background:linear-gradient(180deg, rgba(253,250,243,.98), rgba(253,250,243,.92));
+    backdrop-filter:blur(10px);border-bottom:1px solid rgba(201,169,110,.45);
+    border-radius:0 0 14px 14px;box-shadow:0 6px 18px rgba(90,70,30,.10);}
+  /* 面板本体在手机上减少留白，让内容更靠上 */
+  #customizePanel{padding-top:4px}
+  #customizePanel .customize-grid{display:block}
+  #customizePanel .customize-left{width:100%!important}
+  #customizePanel .customize-right{width:100%!important;margin-top:2px}
+  #customizePanel .bracelet-box{height:auto;min-height:150px}
+  #customizePanel .bracelet-box svg{width:min(210px,60vw);height:auto;margin:0 auto;display:block}
+  /* 预览下方小工具(随机/清空/导出)：一行、缩小、次要化 */
+  #customizePanel .bracelet-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:6px 0}
+  #customizePanel .bracelet-actions .btn{padding:6px 10px;font-size:11.5px;margin:0!important;border-radius:999px;
+    background:rgba(255,255,255,.7);color:#6b7a66;border:1px solid rgba(74,124,89,.25);flex:0 0 auto}
+  /* 模式大卡片(tab)小化成一排等宽按钮 */
+  #customizePanel .cust-modes{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  #customizePanel .cust-mode{width:auto!important;flex:1 1 30%;min-width:0;padding:8px 4px;font-size:12px;border-radius:10px;text-align:center}
+  #customizePanel .cust-mode .cm-icon{font-size:16px;margin:0 auto 2px}
+  /* 联系商家大卡片不再占一整块：压成小胶囊提示，挪到最底部 */
+  #customizePanel .cust-mode.tier.contact{order:10;flex:1 1 100%;width:100%!important;margin:6px 0 0!important;
+    padding:8px 10px;display:flex;align-items:center;gap:8px;justify-content:center;
+    background:rgba(255,255,255,.85)!important;border:1px dashed rgba(201,169,110,.6);border-radius:12px}
+  #customizePanel .cust-mode.tier.contact .cm-text,#customizePanel .cust-mode.tier.contact .cp-steps{display:none}
+  /* 隐藏每个 tab 里重复的旧「✨ 智能搭配」按钮（统一走顶部快捷条） */
+  #customizePanel button[onclick*="oneClickConfig"]{display:none!important}
+  /* tab 内部区块在手机上不强制卡片大留白 */
+  #customizePanel #custBirth,#customizePanel #custHex,#customizePanel #custRandom{margin-top:4px}
+  #customizePanel .birth-grid{grid-template-columns:1fr 1fr;gap:6px}
+  #customizePanel .birth-grid select,#customizePanel .birth-grid input{font-size:15px;padding:8px 6px;border-radius:8px}
+  #customizePanel .btn{width:100%;margin:6px 0 0!important;border-radius:12px}
+  #customizePanel #baziResult,#customizePanel #aiDesignTop,#customizePanel #aiRandomResult{margin-top:8px}
+}
+
