@@ -128,19 +128,40 @@
   window.__b3Close = function (id) { var p = $(id); if (p) hidePanel(p); var dm = $('b3DmStage'); if (id === 'b3WallPanel' || !id) stopDanmaku(); };
 
   /* ============================================================
-   * 分享墙 + 弹幕
+   * 客户授权分享区（首页「臻选推荐」正上方内嵌）+ 留言弹幕
    * ============================================================ */
-  var wallPanel = null, dmTimer = null, dmQueue = [], wallData = [], dmColors = ['b3-dm-1', 'b3-dm-2', 'b3-dm-3'];
-  function ensureWall() {
-    if (wallPanel) return wallPanel;
-    wallPanel = makePanel('b3WallPanel', true);
-    wallPanel.innerHTML = head('客户分享 · 弹幕墙', 'b3WallPanel') +
-      '<div class="b3-body" style="padding-top:10px;">' +
-      '<div class="b3-dm-stage" id="b3DmStage"><span class="b3-dm-hint">🎬 已上墙客户的评论弹幕</span><div class="b3-dm-layer" id="b3DmLayer"></div></div>' +
-      '<div id="b3WallBody"></div>' +
-      '<div class="b3-muted" style="text-align:center;margin-top:10px;">持有官方码的老客户：先 <a href="javascript:void 0" onclick="window.__b3GoVerify()" style="color:#2f5c40;font-weight:700;">官方验证</a>，即可晒单评论享减免上墙 ✦</div>' +
+  var dmTimer = null, dmQueue = [], dmColors = ['b3-dm-1', 'b3-dm-2', 'b3-dm-3'];
+  function ensureShareSection() {
+    var sec = $('b3ShareSec');
+    if (sec) return sec;
+    sec = document.createElement('section');
+    sec.className = 'b3-shares';
+    sec.id = 'b3ShareSec';
+    sec.innerHTML =
+      '<div class="b3-shares-inner">' +
+      '<header class="b3-shares-head">' +
+      '<div class="b3-shares-tt">' +
+      '<span class="b3-shares-eyebrow">CUSTOMER WALL · 客户授权分享</span>' +
+      '<h2>老客人的真实订单与留言</h2>' +
+      '<p>以下均为客户晒单并<b>授权同意</b>后公开展示；有留言的会在顶部以弹幕滚动播放</p>' +
+      '</div>' +
+      '<a class="b3-shares-cta" href="javascript:void 0" onclick="window.__b3GoVerify()">持有官方码？晒单享减免 →</a>' +
+      '</header>' +
+      '<div class="b3-dm-line" id="b3DmLine" style="display:none;"><span class="b3-dm-hint">💬 客户留言弹幕</span><div class="b3-dm-layer" id="b3DmLayerI"></div></div>' +
+      '<div class="b3-share-grid" id="b3ShareGrid"></div>' +
       '</div>';
-    return wallPanel;
+    var lux = document.getElementById('bLux');
+    if (lux && lux.parentNode) lux.parentNode.insertBefore(sec, lux);
+    else document.body.appendChild(sec);
+    /* 可见时才播弹幕 */
+    try {
+      var io = new IntersectionObserver(function (entries) {
+        if (entries[0] && entries[0].isIntersecting) { if (dmQueue.length) startDanmaku(); }
+        else stopDanmaku();
+      }, { threshold: 0.05 });
+      io.observe(sec);
+    } catch (e) {}
+    return sec;
   }
   window.__b3GoVerify = function () {
     closeAll();
@@ -151,12 +172,12 @@
     return t.length > 42 ? t.slice(0, 42) + '…' : t;
   }
   function pushBullet(txt) {
-    var layer = $('b3DmLayer');
+    var layer = $('b3DmLayerI');
     if (!layer || !txt) return;
     var b = document.createElement('div');
     b.className = 'b3-dm-bullet ' + dmColors[Math.floor(Math.random() * dmColors.length)];
     b.innerHTML = txt;
-    b.style.top = (12 + Math.random() * 62) + '%';
+    b.style.top = (18 + Math.random() * 52) + '%';
     var dur = 9 + Math.random() * 8;
     b.style.animationDuration = dur + 's';
     b.style.animationDelay = (-Math.random() * 6) + 's';
@@ -169,61 +190,76 @@
     var i = 0;
     dmTimer = setInterval(function () {
       if (document.hidden) return;
+      var line = $('b3DmLine');
+      if (!line || line.style.display === 'none') return;
       if (i >= dmQueue.length) i = 0;
       var q = dmQueue[i++];
       if (!q) return;
       pushBullet('<span>' + esc(q.name) + '：</span>' + esc(q.txt) + (q.extra ? ' <b>' + esc(q.extra) + '</b>' : ''));
-    }, 900);
+    }, 1100);
   }
   function stopDanmaku() {
     if (dmTimer) { clearInterval(dmTimer); dmTimer = null; }
-    var layer = $('b3DmLayer');
+    var layer = $('b3DmLayerI');
     if (layer) layer.innerHTML = '';
   }
   async function loadWallData() {
     var sb = sup();
     if (!sb) return [];
     try {
-      var r = await sb.from('shares').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(80);
+      var r = await sb.from('shares').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(60);
       if (r.error) throw r.error;
       return r.data || [];
     } catch (e) { dbHint(e, ''); return []; }
   }
-  function wallCard(s) {
+  function shareCard(s) {
     var img = firstImg(s.img);
     var media = img ? (isVideo(img) ? '<video class="b3-card-img" src="' + esc(img) + '" muted loop playsinline></video>'
       : '<img class="b3-card-img" src="' + esc(img) + '" loading="lazy" onerror="this.style.display=\'none\'">')
       : '<div class="b3-card-img-ph">💎</div>';
     return '<div class="b3-card" onclick="window.__b3Lightbox(\'' + esc(String(s.comment || '')).replace(/'/g, '') + '\',\'' + esc(img).replace(/'/g, '') + '\',\'' + esc(String(s.name || '')).replace(/'/g, '') + '\')">' +
-      '<span class="b3-card-tag">✓ 已上墙</span>' + media +
+      '<span class="b3-card-tag">✓ 已授权</span>' + media +
       '<div class="b3-card-body"><div class="b3-card-name">' + esc(s.name || '白桦定制') + '</div>' +
       '<div class="b3-card-code">码 ' + esc(s.code || '') + (s.batch ? ' · ' + esc(s.batch) : '') + '</div>' +
       (s.comment ? '<div class="b3-card-comment">“' + esc(s.comment) + '”</div>' : '') +
       (s.discount ? '<div class="b3-card-tag" style="left:8px;right:auto;top:auto;bottom:8px;">减免 ¥' + esc(String(s.discount)) + '</div>' : '') +
       '</div></div>';
   }
-  function renderWall(rows) {
-    var body = $('b3WallBody');
-    if (!body) return;
+  function renderShareSection(rows) {
+    var grid = $('b3ShareGrid');
+    if (!grid) return;
     var approved = (rows || []).filter(function (s) { return s.approved === true; });
-    wallData = approved;
     dmQueue = approved.filter(function (s) { return s.comment && String(s.comment).trim().length > 1; })
       .map(function (s) { return { name: (s.name || '白桦客户').slice(0, 12), txt: bulletText(s.comment), extra: s.discount ? '减免¥' + s.discount : '' }; });
+    var line = $('b3DmLine');
+    if (line) line.style.display = dmQueue.length ? 'block' : 'none';
     if (!approved.length) {
-      body.innerHTML = '<div class="b3-empty">✨ 还没有已上墙的分享<br>持有官方码验证后晒单评论，审核通过即可在此上墙、您的评论也会成为弹幕<br><button class="b3-btn b3-btn-gold b3-cta" onclick="window.__b3GoVerify()">📸 去晒单享减免</button></div>';
+      grid.innerHTML = '<div class="b3-empty2">✨ 还没有客户授权晒单<br>持有官方码 → 官方验证 → 晒单评论（同意授权）→ 审核通过后即展示于此，留言会变成弹幕<br><button class="b3-btn b3-btn-gold" style="margin-top:12px;" onclick="window.__b3GoVerify()">📸 去晒单享减免</button></div>';
       return;
     }
-    body.innerHTML = '<div class="b3-grid">' + approved.map(wallCard).join('') + '</div>';
+    grid.innerHTML = approved.slice(0, 30).map(shareCard).join('');
   }
-  async function openWall() {
-    ensureWall();
-    showPanel(wallPanel);
-    var body = $('b3WallBody');
-    if (body) body.innerHTML = '<div class="b3-empty">加载分享中…</div>';
-    renderWall(await loadWallData());
-    startDanmaku();
+  async function refreshShares() {
+    try {
+      ensureShareSection();
+      renderShareSection(await loadWallData());
+      var s = $('b3ShareSec');
+      if (s) {
+        var r = s.getBoundingClientRect();
+        if (r.top < window.innerHeight && r.bottom > 0 && dmQueue.length) startDanmaku();
+      }
+    } catch (e) {}
   }
-  window.openShareWall = openWall;
+  window.__b3RefreshShares = function () { refreshShares(); };
+  window.__b3GoShares = function () {
+    closeAll();
+    setTimeout(function () {
+      var s = $('b3ShareSec');
+      if (s && s.scrollIntoView) { try { s.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { s.scrollIntoView(); } }
+      setTimeout(function () { refreshShares(); }, 500);
+    }, 80);
+  };
+  window.openShareWall = window.__b3GoShares; /* 兼容旧引用 */
   window.__b3Lightbox = function (comment, img, name) {
     var lb = $('b3Lightbox');
     if (!lb) {
@@ -267,10 +303,10 @@
     }
     var prefix = '<div class="b3-form">';
     if (state && state.approved) {
-      return prefix + '<div class="b3-status ok"><div class="big">✅ 已上墙 · 减免已生效</div>该分享已审核通过并上墙，评论已在客户分享区作为弹幕播放。<br>联系微信出示此码即可享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br>' + wechatBtn() + '</div></div>';
+      return prefix + '<div class="b3-status ok"><div class="big">✅ 已授权展示 · 减免已生效</div>该分享已审核通过，展示在首页「客户授权分享」区，留言以弹幕滚动播放。<br>联系微信出示此码即可享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br>' + wechatBtn() + '</div></div>';
     }
     if (state && !state.approved) {
-      return prefix + '<div class="b3-status warn"><div class="big">⏳ 审核中</div>该官方码已提交晒单评论，正在等待审核（或已被下架）。<br>审核通过后自动上墙、评论成为弹幕，并享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:8px;"><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3RefreshState()">↻ 刷新状态</button><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3ResetShare()">✎ 重新晒单</button></div></div></div>';
+      return prefix + '<div class="b3-status warn"><div class="big">⏳ 审核中</div>该官方码已提交晒单评论，正在等待审核（或已被下架）。<br>审核通过后展示在授权分享区、留言成为弹幕，并享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:8px;"><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3RefreshState()">↻ 刷新状态</button><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3ResetShare()">✎ 重新晒单</button></div></div></div>';
     }
     return prefix +
       '<div class="b3-quote">🎉 晒单评论 + 同意授权分享，审核通过后即可 <b>减免 ¥' + discount + '</b>（联系微信出示本码核销），您的评论还会在客户分享区以弹幕播放。</div>' +
@@ -373,7 +409,7 @@
       localSave(map);
       hidePanel(sharePanel);
       var p = ensureSharePanel();
-      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单评论已提交</div>审核通过后：<br>· 您的产品与评论将出现在<b>客户分享区</b><br>· 评论以<b>弹幕</b>播放<br>· 享 <b>减免 ¥' + shareDiscount + '</b>（联系微信出示本码核销）<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3Close(\'b3SharePanel\');window.openShareWall()">🎬 去看看客户分享墙</button></div></div>';
+      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单评论已提交</div>审核通过后：<br>· 您的订单与评论将展示在首页<b>「客户授权分享」</b><br>· 留言会以<b>弹幕</b>滚动播放<br>· 享 <b>减免 ¥' + shareDiscount + '</b>（联系微信出示本码核销）<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看授权分享区</button></div></div>';
       showPanel(p);
       toast('✅ 已提交，审核通过即减免 ¥' + shareDiscount);
     } catch (e) {
@@ -469,7 +505,7 @@
         '<button class="b3-tab on" data-t="pending" onclick="window.__b3SecTab(\'pending\')">⏳ 待审核</button>' +
         '<button class="b3-tab" data-t="approved" onclick="window.__b3SecTab(\'approved\')">✅ 已上墙</button>' +
         '<button class="b3-tab" data-t="all" onclick="window.__b3SecTab(\'all\')">全部</button>' +
-        '<button class="b3-tab" style="margin-left:auto;" onclick="window.openShareWall()">🎬 预览客户分享墙</button></div>' +
+        '<button class="b3-tab" style="margin-left:auto;" onclick="window.__b3RefreshShares()">↻ 刷新分享数据</button></div>' +
         '<div id="b3AdminList" class="b3-admin-list" style="margin-top:10px;"></div>';
       var ref = document.getElementById('secNotice') || document.getElementById('secGallery') || home.nextElementSibling;
       if (ref && ref.parentNode) ref.parentNode.insertBefore(secSharesEl, ref);
@@ -879,21 +915,12 @@
       };
     }
   }
-  function makeFab() {
-    if ($('b3Fab')) return;
-    var fab = document.createElement('button');
-    fab.id = 'b3Fab';
-    fab.className = 'b3-fab';
-    fab.innerHTML = '<span class="b3-fab-dot"></span>🎬 客户分享墙';
-    fab.onclick = function () { openWall(); };
-    document.body.appendChild(fab);
-  }
   var started = false;
   function init() {
     if (started) return;
     started = true;
     if (!document.body) { setTimeout(init, 200); return; }
-    try { makeFab(); } catch (e) {}
+    try { refreshShares(); } catch (e) {}
     try { startTextFix(); } catch (e) {}
     try { initCustomizeQuick(); } catch (e) {}
     try { ensureAdminUI(); } catch (e) {}
