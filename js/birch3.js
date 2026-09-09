@@ -676,10 +676,11 @@
       if (!res.ok || !r || !r.ok) {
         var err = (r && (r.error || r.raw)) || ('HTTP ' + res.status);
         toast('AI 服务错误：' + err);
+        if (mode === 'random') { try { call('randomBracelet', []); toast('已用本地随缘搭配代替 ✨'); } catch (e2) {} }
         if (/未配置|密钥|SILICON|img_key/i.test(String(err))) {
           setTimeout(function () { alert('AI 出图密钥未配置：\n请确认已执行「桦库-完整SQL.sql」的 AI 配置段（img_key 已内置予光同款通义密钥），或到 Supabase Secrets 设置 SILICON_KEY。'); }, 80);
         } else if (/DeepSeek|API|401|403/.test(String(err))) {
-          setTimeout(function () { alert('DeepSeek 密钥未配置：请到 Supabase Settings → Secrets 设置 AI_API_KEY / AI_MODEL，或在 settings 表 ai.key/ai.model 配置后重新部署 ai-assistant。'); }, 80);
+          setTimeout(function () { alert('DeepSeek 密钥未配置：请到 Supabase Settings → Secrets 设置 AI_API_KEY / AI_MODEL，或在 settings 表 ai.key/ai.model 配置后重新部署 birch-ai。'); }, 80);
         }
         return;
       }
@@ -747,6 +748,7 @@
       var qc = call('consumeAiQuota', []);
     } catch (e) {
       toast('AI 调用失败：' + (e && e.message ? e.message : e));
+      if (mode === 'random') { try { call('randomBracelet', []); toast('已用本地随缘搭配代替 ✨'); } catch (e2) {} }
     } finally {
       call('hideLoading', []);
     }
@@ -762,6 +764,25 @@
           return origAiDesign.call(window, mode);
         }
         return aiDesignNew(mode);
+      };
+    }
+    /* 接管「智能搭配」按钮：三种模式无条件走新 AI（birch-ai design），
+       避免旧逻辑把 mode 直接发给函数导致 chat 分支报“缺少问题内容” */
+    var oOneClick = window.oneClickConfig;
+    if (typeof oOneClick === 'function') {
+      window.oneClickConfig = function (mode) {
+        if (mode === 'bazi' || mode === 'hex' || mode === 'random') {
+          try {
+            var cfg = get('aiConfig') || {};
+            var fu = cfg && cfg.funcUrl ? cfg.funcUrl : '';
+            var useNew = !fu || /ai-assistant|birch-ai/i.test(fu);
+            if (useNew && typeof window.aiDesign === 'function') {
+              window.aiDesign(mode);
+              return;
+            }
+          } catch (e) {}
+        }
+        return oOneClick.apply(window, arguments);
       };
     }
   }
