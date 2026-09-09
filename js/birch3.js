@@ -495,7 +495,14 @@
     if (!id) { toast('请先完成官方验证'); return; }
     renderSharePanel(id);
   };
-  window.__b3Wheel = function () { closeAll(); setTimeout(function () { call('openWheel', []); }, 60); };
+  window.__b3Wheel = function () {
+    var codeId = get('currentVerifyId');
+    closeAll();
+    setTimeout(function () {
+      if (codeId) { try { window.__b3OpenCodeWheel(codeId); } catch (e) { call('openWheel', []); } }
+      else call('openWheel', []);
+    }, 80);
+  };
 
   function watchVerifyResult() {
     var rp = $('resultPanel');
@@ -683,14 +690,38 @@
     var sb = sup();
     if (!sb) return;
     dbWheelBusy = true;
-    sb.from('records').select('id,wheel_enabled').limit(300).then(function (r) {
+    sb.from('records').select('id,wheel_enabled,wheel_spun').limit(300).then(function (r) {
       dbWheelBusy = false;
-      var st = {};
-      if (!r.error && r.data) r.data.forEach(function (x) { st[String(x.id)] = x.wheel_enabled !== false; });
+      var st = {}, st2 = {};
+      if (!r.error && r.data) r.data.forEach(function (x) { st[String(x.id)] = x.wheel_enabled !== false; st2[String(x.id)] = !!x.wheel_spun; });
       var rows = wrap.querySelectorAll('.db-record');
       for (var i = 0; i < rows.length; i++) {
         var id = rows[i].getAttribute('data-id');
         var box = rows[i].querySelector('.b3-wheel-box');
+        if (box && !box.querySelector('.b3-spun-ctl')) {
+          var sc = document.createElement('span');
+          sc.className = 'b3-spun-ctl';
+          sc.style.cssText = 'margin-left:auto;font-size:11px;';
+          sc.innerHTML = '<span data-spun style="color:#c25c5c;font-weight:700;display:none;">已抽</span>' +
+            '<button data-reset style="display:none;font-size:11px;color:#2f5c40;background:none;border:1px solid #4a7c59;border-radius:999px;padding:2px 8px;cursor:pointer;">重置抽奖</button>';
+          sc.addEventListener('click', function (ev) {
+            var btn = ev.target.closest('[data-reset]');
+            if (!btn) return;
+            var rowEl = btn.closest('.db-record');
+            var rid = rowEl ? rowEl.getAttribute('data-id') : '';
+            if (!rid) return;
+            var pwd = adminPwd();
+            if (!pwd) { toast('请先登录管理员账号'); return; }
+            var s3 = sup();
+            if (!s3) return;
+            s3.rpc('reset_record_wheel', { p_id: rid, p_pwd: pwd }).then(function (rr) {
+              if (rr.error || rr.data === false) { if (!dbHint(rr.error, '重置')) toast('重置失败'); return; }
+              toast('✅ 已重置：该码可再次抽奖一次');
+              __b3DbWheelUI();
+            });
+          });
+          box.appendChild(sc);
+        }
         if (!box) {
           box = document.createElement('div');
           box.className = 'b3-wheel-box';
@@ -721,6 +752,13 @@
         var on = st[id] !== undefined ? st[id] : true;
         var bs = box.querySelectorAll('button');
         if (bs.length) { bs[0].style.opacity = on ? '1' : '.45'; bs[0].style.boxShadow = on ? '0 0 0 2px rgba(74,124,89,.35)' : 'none'; bs[1].style.opacity = on ? '.45' : '1'; bs[1].style.boxShadow = on ? 'none' : '0 0 0 2px rgba(201,169,110,.45)'; }
+        var spun = !!st2[id];
+        var ctl = box.querySelector('.b3-spun-ctl');
+        if (ctl) {
+          var t1 = ctl.querySelector('[data-spun]'), r1 = ctl.querySelector('[data-reset]');
+          if (t1) t1.style.display = spun ? 'inline' : 'none';
+          if (r1) r1.style.display = spun ? 'inline' : 'none';
+        }
       }
     }).catch(function () { dbWheelBusy = false; });
   }
@@ -738,11 +776,89 @@
     if (!el || !code) return;
     var sb = sup();
     if (!sb) { el.style.display = ''; return; }
-    sb.from('records').select('wheel_enabled').eq('id', String(code)).limit(1).then(function (r) {
-      var on = true;
-      if (!r.error && r.data && r.data.length) on = r.data[0].wheel_enabled !== false;
-      el.style.display = on ? '' : 'none';
+    sb.from('records').select('wheel_enabled,wheel_spun').eq('id', String(code)).limit(1).then(function (r) {
+      var en = true, spun = false;
+      if (!r.error && r.data && r.data.length) { en = r.data[0].wheel_enabled !== false; spun = !!r.data[0].wheel_spun; }
+      if (!en) { el.style.display = 'none'; return; }
+      if (spun) { el.textContent = '🎡 该码已抽过'; el.disabled = true; el.style.opacity = '.6'; }
+      else { el.textContent = '🎡 幸运转盘减免（限 1 次）'; el.disabled = false; el.style.opacity = '1'; }
     }).catch(function () {});
+  };
+
+  /* ---- 幸运转盘：绑定官方码 · 后台允许下每码仅一次（扫NFC/二维码=同一防伪码） ---- */
+  var WSPIN_KEY = 'b3_code_spin_v1';
+  function spinRead(code) { try { var m = JSON.parse(localStorage.getItem(WSPIN_KEY) || '{}') || {}; return m[String(code)] || null; } catch (e) { return null; } }
+  function spinSave(code, amt) { try { var m = JSON.parse(localStorage.getItem(WSPIN_KEY) || '{}') || {}; m[String(code)] = { amt: amt, ts: Date.now() }; localStorage.setItem(WSPIN_KEY, JSON.stringify(m)); } catch (e) {} }
+  var codeSpinBusy = false;
+  window.__b3OpenCodeWheel = async function (code) {
+    if (!code) { toast('请先完成官方验证'); return; }
+    var rec = null;
+    var sb = sup();
+    if (sb) {
+      try {
+        var r = await sb.from('records').select('wheel_enabled,wheel_spun').eq('id', String(code)).limit(1);
+        if (!r.error && r.data && r.data.length) rec = r.data[0];
+      } catch (e) {}
+    }
+    if (rec && rec.wheel_enabled === false) { toast('该官方码未开放幸运转盘'); return; }
+    if (rec && rec.wheel_spun) { toast('该官方码已抽过一次奖'); return; }
+    if (!rec && spinRead(code)) { toast('该官方码已抽过一次奖'); return; }
+    window.__b3WheelCode = String(code);
+    try { call('renderWheel', []); } catch (e) {}
+    var w = $('wheel'); if (w) w.style.transform = 'rotate(0deg)';
+    var wr = $('wheelResult'); if (wr) wr.style.display = 'none';
+    var m = $('wheelModal'); if (m) { m.style.zIndex = '11600'; m.classList.add('show'); }
+    call('lockScroll', [true]);
+    toast('该官方码可抽奖 1 次 · 点「抽奖」开转 🎡');
+  };
+  function wheelPick(cfg) {
+    var amounts = [];
+    try { var wf = get('wheelAmounts'); if (typeof wf === 'function') amounts = wf(); } catch (e) {}
+    if (!amounts || amounts.length < 4) { var mn = Number(cfg.min) || 28, mx = Number(cfg.max) || 88, ev = (mx - mn) / 3; amounts = [mn, Math.round(mn + ev), Math.round(mn + ev * 2), mx]; }
+    var probs = (cfg.probs && cfg.probs.length === 4) ? cfg.probs : [25, 25, 25, 25];
+    var sum = probs.reduce(function (a, b) { return a + b; }, 0) || 100;
+    var t = Math.random() * sum, idx = 0, acc = 0;
+    for (var i = 0; i < 4; i++) { acc += probs[i]; if (t <= acc) { idx = i; break; } }
+    return { index: idx, amount: amounts[idx] };
+  }
+  var oSpin = window.spinWheel;
+  window.spinWheel = function () {
+    if (!window.__b3WheelCode) return oSpin ? oSpin.apply(window, arguments) : undefined;
+    if (codeSpinBusy) return;
+    codeSpinBusy = true;
+    var code = window.__b3WheelCode;
+    var cfg = null;
+    try { cfg = get('wheelCfg'); } catch (e) {}
+    cfg = cfg || { min: 28, max: 88, probs: [25, 25, 25, 25] };
+    var seg = wheelPick(cfg);
+    var w = $('wheel');
+    var rot = 720 + (360 - (45 + 90 * seg.index)) % 360;
+    if (w) w.style.transform = 'rotate(' + rot + 'deg)';
+    var wr = $('wheelResult');
+    if (wr) { wr.style.display = 'block'; wr.innerHTML = '<div style="color:var(--text-light);font-size:13px;">✨ 幸运转盘揭晓中...</div>'; }
+    setTimeout(function () {
+      codeSpinBusy = false;
+      try { call('showWheelResult', [seg.amount, '该官方码抽奖完成 · 联系微信定制时出示即可使用']); } catch (e) {}
+      spinSave(code, seg.amount);
+      var s2 = sup();
+      if (s2) { try { s2.rpc('try_claim_wheel', { p_code: code }).catch(function () {}); } catch (e2) {} }
+      try {
+        var r2 = $('wheelResult');
+        if (r2 && !r2.querySelector('.b3-next-share')) {
+          var b = document.createElement('button');
+          b.className = 'b3-btn b3-btn-main';
+          b.style.cssText = 'margin-top:10px;width:100%;';
+          b.textContent = '下一步：授权晒单 →';
+          b.onclick = function () { try { call('closeWheel', []); } catch (e) {} window.__b3OpenShare(); };
+          r2.appendChild(b);
+        }
+      } catch (e3) {}
+    }, 3300);
+  };
+  window.__b3OpenShare = function () {
+    var id = get('currentVerifyId');
+    if (!id) { toast('请先完成官方验证'); return; }
+    renderSharePanel(id);
   };
 
   /* ============================================================
@@ -1052,6 +1168,23 @@
     try { watchVerifyResult(); } catch (e) {}
     try { cleanBuy(); } catch (e) {}
     try { hookAi(); } catch (e) {}
+    /* 官方码识别归一：纯码 / ?code= 链接 / NFC·QR 里的 birchstudio.cn 网址 → 同一防伪码 */
+    try {
+      var oExt = window.extractVerifyId;
+      if (typeof oExt === 'function' && !window.__b3ExtWrapped) {
+        window.__b3ExtWrapped = 1;
+        window.extractVerifyId = function (v) {
+          var r = null;
+          try { r = oExt(v); } catch (e) {}
+          if (r) return r;
+          var s2 = String(v || '');
+          var m = s2.match(/(?:[?&#](?:code|c|id|verify|anti)=)([A-Za-z0-9_-]{2,48})/i);
+          if (m) return m[1];
+          var m2 = s2.match(/(?:birchstudio.cn|cplyzukenqxdwhfivlqx)[^A-Za-z0-9]{0,4}([A-Za-z0-9_-]{2,48})/i);
+          return m2 ? m2[1] : null;
+        };
+      }
+    } catch (e) {}
     /* 后台每次打开分享审核页刷新 */
     var oOpen = window.openAdminSection;
     if (typeof oOpen === 'function') {
