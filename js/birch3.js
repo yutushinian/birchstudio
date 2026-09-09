@@ -141,11 +141,11 @@
       '<div class="b3-shares-inner">' +
       '<header class="b3-shares-head">' +
       '<div class="b3-shares-tt">' +
-      '<span class="b3-shares-eyebrow">CUSTOMER WALL · 客户授权分享</span>' +
-      '<h2>老客人的真实订单与留言</h2>' +
-      '<p>以下均为客户晒单并<b>授权同意</b>后公开展示；有留言的会在顶部以弹幕滚动播放</p>' +
+      '<span class="b3-shares-eyebrow">CUSTOMER · 客户授权晒单</span>' +
+      '<h2>客户晒单 · 与臻选同款呈现</h2>' +
+      '<p>以下均为客户<b>授权同意</b>后展示：与其订单一致（图片 / 品名 / 设计理念）；客户留言会在顶部以弹幕滚动播放</p>' +
       '</div>' +
-      '<a class="b3-shares-cta" href="javascript:void 0" onclick="window.__b3GoVerify()">持有官方码？晒单享减免 →</a>' +
+      '<a class="b3-shares-cta" href="javascript:void 0" onclick="window.__b3GoVerify()">持有官方码？晒单展示 →</a>' +
       '</header>' +
       '<div class="b3-dm-line" id="b3DmLine" style="display:none;"><span class="b3-dm-hint">💬 客户留言弹幕</span><div class="b3-dm-layer" id="b3DmLayerI"></div></div>' +
       '<div class="b3-share-grid" id="b3ShareGrid"></div>' +
@@ -203,46 +203,61 @@
     var layer = $('b3DmLayerI');
     if (layer) layer.innerHTML = '';
   }
-  async function loadWallData() {
+  async function loadSectionData() {
     var sb = sup();
-    if (!sb) return [];
+    if (!sb) return { rows: [], recMap: {} };
     try {
-      var r = await sb.from('shares').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(60);
+      var r = await sb.from('shares').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(50);
       if (r.error) throw r.error;
-      return r.data || [];
-    } catch (e) { dbHint(e, ''); return []; }
+      var rows = r.data || [];
+      var recMap = {};
+      var codes = rows.filter(function (x) { return x.code; }).map(function (x) { return String(x.code); });
+      if (codes.length) {
+        try {
+          var rr = await sb.from('records').select('id,product_name,batch_no,message,image_url').in('id', codes.slice(0, 50)).limit(60);
+          if (!rr.error && rr.data) {
+            rr.data.forEach(function (rc) { recMap[String(rc.id)] = rc; });
+          }
+        } catch (e) {}
+      }
+      return { rows: rows, recMap: recMap };
+    } catch (e) { dbHint(e, ''); return { rows: [], recMap: {} }; }
   }
-  function shareCard(s) {
+  /* 卡片样式对齐臻品橱窗：图片 + 品名 + 设计理念（来自订单记录） */
+  function shareCard(s, idea) {
     var img = firstImg(s.img);
     var media = img ? (isVideo(img) ? '<video class="b3-card-img" src="' + esc(img) + '" muted loop playsinline></video>'
       : '<img class="b3-card-img" src="' + esc(img) + '" loading="lazy" onerror="this.style.display=\'none\'">')
       : '<div class="b3-card-img-ph">💎</div>';
-    return '<div class="b3-card" onclick="window.__b3Lightbox(\'' + esc(String(s.comment || '')).replace(/'/g, '') + '\',\'' + esc(img).replace(/'/g, '') + '\',\'' + esc(String(s.name || '')).replace(/'/g, '') + '\')">' +
-      '<span class="b3-card-tag">✓ 已授权</span>' + media +
+    return '<div class="b3-card" onclick="window.__b3Lightbox(\'\',\'' + esc(img).replace(/'/g, '') + '\',\'' + esc(String(s.name || '白桦定制')).replace(/'/g, '') + '\')">' +
+      media +
       '<div class="b3-card-body"><div class="b3-card-name">' + esc(s.name || '白桦定制') + '</div>' +
-      '<div class="b3-card-code">码 ' + esc(s.code || '') + (s.batch ? ' · ' + esc(s.batch) : '') + '</div>' +
-      (s.comment ? '<div class="b3-card-comment">“' + esc(s.comment) + '”</div>' : '') +
-      (s.discount ? '<div class="b3-card-tag" style="left:8px;right:auto;top:auto;bottom:8px;">减免 ¥' + esc(String(s.discount)) + '</div>' : '') +
+      (idea ? '<div class="b3-card-idea">' + esc(idea) + '</div>' : '') +
       '</div></div>';
   }
-  function renderShareSection(rows) {
+  function renderShareSection(rows, recMap) {
     var grid = $('b3ShareGrid');
     if (!grid) return;
     var approved = (rows || []).filter(function (s) { return s.approved === true; });
     dmQueue = approved.filter(function (s) { return s.comment && String(s.comment).trim().length > 1; })
-      .map(function (s) { return { name: (s.name || '白桦客户').slice(0, 12), txt: bulletText(s.comment), extra: s.discount ? '减免¥' + s.discount : '' }; });
+      .map(function (s) { return { name: (s.name || '白桦客户').slice(0, 12), txt: bulletText(s.comment), extra: '' }; });
     var line = $('b3DmLine');
     if (line) line.style.display = dmQueue.length ? 'block' : 'none';
     if (!approved.length) {
-      grid.innerHTML = '<div class="b3-empty2">✨ 还没有客户授权晒单<br>持有官方码 → 官方验证 → 晒单（可选留言）→ 审核通过后即展示于此，留言变成弹幕<br><button class="b3-btn b3-btn-gold" style="margin-top:12px;" onclick="window.__b3GoVerify()">📸 去晒单享减免</button></div>';
+      grid.innerHTML = '<div class="b3-empty2">✨ 还没有客户授权晒单<br>持有官方码 → 官方验证 → 授权晒单（可选留言）→ 审核通过后即展示于此<br><button class="b3-btn b3-btn-gold" style="margin-top:12px;" onclick="window.__b3GoVerify()">📸 去授权晒单</button></div>';
       return;
     }
-    grid.innerHTML = approved.slice(0, 30).map(shareCard).join('');
+    grid.innerHTML = approved.slice(0, 30).map(function (s) {
+      var rc = recMap ? recMap[String(s.code)] : null;
+      var idea = rc && rc.message ? rc.message : (s.idea || '');
+      return shareCard(s, idea);
+    }).join('');
   }
   async function refreshShares() {
     try {
       ensureShareSection();
-      renderShareSection(await loadWallData());
+      var d = await loadSectionData();
+      renderShareSection(d.rows, d.recMap);
       var s = $('b3ShareSec');
       if (s) {
         var r = s.getBoundingClientRect();
@@ -308,20 +323,20 @@
       '</div></div>';
     var prefix = '<div class="b3-form">';
     if (state && state.approved) {
-      return prefix + '<div class="b3-status ok"><div class="big">✅ 已授权展示 · 减免已生效</div>该晒单已审核通过，展示在首页「客户授权分享」区，留言以弹幕滚动播放。<br>联系微信出示此码即可享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br>' + wechatBtn() + '</div></div>';
+      return prefix + '<div class="b3-status ok"><div class="big">✅ 已授权展示</div>该晒单已审核通过，展示在首页「客户晒单」区（留言以弹幕播放）。<br>联系微信可了解更多。<br><br>' + wechatBtn() + '</div></div>';
     }
     if (state && !state.approved) {
-      return prefix + '<div class="b3-status warn"><div class="big">⏳ 审核中</div>该官方码已提交晒单，正在等待审核（或已被下架）。<br>审核通过后展示在授权分享区、留言成为弹幕，并享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:8px;"><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3RefreshState()">↻ 刷新状态</button><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3ResetShare()">✎ 重新晒单</button></div></div></div>';
+      return prefix + '<div class="b3-status warn"><div class="big">⏳ 审核中</div>该官方码已提交晒单，正在等待审核（或已被下架）。<br>审核通过后展示在首页客户晒单区，留言以弹幕播放。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:8px;"><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3RefreshState()">↻ 刷新状态</button><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3ResetShare()">✎ 重新晒单</button></div></div></div>';
     }
     return prefix +
-      '<div class="b3-quote">🎉 同意授权晒单，审核通过即享 <b>减免 ¥' + discount + '</b>（联系微信出示本码核销）。<br>图片与产品信息取自您的订单，您只需选择是否留言。</div>' +
+      '<div class="b3-quote">同意授权后，您的订单将按原样展示在首页「客户晒单」区（图片 / 品名 / 设计理念取自订单记录）；<br>下方可选是否留言，留言会以弹幕播放。</div>' +
       preview +
       '<label>留言（选填，可不留言）</label>' +
       '<textarea id="b3Comment" maxlength="120" placeholder="想说点什么就说点什么（≤120 字）：佩戴感受、给白桦的话… 留了言会以弹幕滚动播放；不填则只展示订单。"></textarea>' +
       '<label class="b3-check"><input type="checkbox" id="b3Consent" checked><span><b>我同意授权</b>：白桦可将我该订单的图片、产品信息与官方码展示于官网「客户授权分享」区；若我填写留言，则一并公开展示并作为弹幕播放。仅用于品牌展示，不另作他用。</span></label>' +
       '<div class="b3-row" style="justify-content:center;margin-top:14px;">' +
       '<button class="b3-btn b3-btn-main" id="b3SubmitShare">✅ 同意授权 · 提交晒单</button></div>' +
-      '<div class="b3-muted" style="text-align:center;margin-top:8px;">提交后由品牌方后台审核，审核通过后展示与减免生效；如需撤下可联系客服。</div></div>';
+      '<div class="b3-muted" style="text-align:center;margin-top:8px;">提交后由品牌方后台审核；如需撤下可联系客服。</div></div>';
   }
   window.__b3PickImg = function (el, i) {
     var all = el.parentNode.querySelectorAll('.b3-imgchip');
@@ -369,7 +384,7 @@
     }
     var st = approved ? { approved: true, discount: approved.discount || shareDiscount } : (local ? { approved: false, discount: local.discount || shareDiscount } : null);
     var p = ensureSharePanel();
-    p.innerHTML = head('晒单授权 · 留言享减免', 'b3SharePanel') + '<div class="b3-body">' + shareModalHTML(shareRec, shareDiscount, st) + '</div>';
+    p.innerHTML = head('晒单授权', 'b3SharePanel') + '<div class="b3-body">' + shareModalHTML(shareRec, shareDiscount, st) + '</div>';
     showPanel(p);
     var btn = $('b3SubmitShare');
     if (btn) btn.onclick = function () { submitShare(code); };
@@ -398,9 +413,9 @@
       hidePanel(sharePanel);
       var p = ensureSharePanel();
       var msgLine = comment ? '· 您的留言将<b>以弹幕</b>滚动播放' : '· 未留言：仅展示订单卡片';
-      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单已提交</div>审核通过后：<br>· 您的订单将展示在首页<b>「客户授权分享」</b><br>' + msgLine + '<br>· 享 <b>减免 ¥' + shareDiscount + '</b>（联系微信出示本码核销）<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看授权分享区</button></div></div>';
+      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单已提交</div>审核通过后：<br>· 将展示在首页<b>「客户晒单」</b>区<br>' + msgLine + '<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看客户晒单区</button></div></div>';
       showPanel(p);
-      toast('✅ 已提交，审核通过即减免 ¥' + shareDiscount);
+      toast('✅ 已提交，审核通过后即展示在首页');
     } catch (e) {
       if (!dbHint(e, '提交')) toast('提交失败：' + (e && e.message ? e.message : e));
       if (btn) { btn.disabled = false; btn.textContent = '✅ 同意授权 · 提交晒单'; }
@@ -427,13 +442,13 @@
     wrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin:2px 0 10px;';
     var d = document.createElement('div');
     d.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-    d.innerHTML = '<button class="b3-btn b3-btn-main" style="flex:1;min-width:150px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3OpenShare()">✅ 晒单授权 · 留言享减免</button>' +
+    d.innerHTML = '<button class="b3-btn b3-btn-main" style="flex:1;min-width:150px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3OpenShare()">✅ 晒单授权分享</button>' +
       '<button class="b3-btn b3-btn-gold" style="flex:1;min-width:120px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3Wheel()">🎡 幸运转盘立减</button>';
     wrap.appendChild(d);
     var tip = document.createElement('div');
     tip.className = 'b3-muted';
     tip.style.cssText = 'font-size:11px;color:#6b7a66;';
-    tip.textContent = '同意授权晒单（图片取自订单，可留言），审核通过后展示在首页授权区并减免；留言会以弹幕播放';
+    tip.textContent = '同意授权晒单（图片 / 品名 / 设计理念取自订单），审核通过后展示在首页「客户晒单」区；留言以弹幕播放';
     wrap.appendChild(tip);
     var browse = $('browseBtn');
     if (browse && browse.parentNode === rp) rp.insertBefore(wrap, browse);
@@ -482,7 +497,7 @@
       secSharesEl.innerHTML =
         '<button class="back-btn" onclick="goBackAdmin()">← 返回</button>' +
         '<h3 style="margin-bottom:6px;color:var(--text-dark)">📣 分享审核库（客户晒单 · 授权分享）</h3>' +
-        '<p style="font-size:12px;color:var(--text-light);margin-bottom:6px;line-height:1.9;">客户在「官方验证」后提交的晒单评论在此<b>一行一条</b>显示。点「通过上墙」后：产品图+评论进入首页客户分享墙、评论以弹幕播放、客户享减免（凭官方码+微信核销）。</p>' +
+        '<p style="font-size:12px;color:var(--text-light);margin-bottom:6px;line-height:1.9;">客户在「官方验证」后提交的晒单评论在此<b>一行一条</b>显示。点「通过上墙」后：产品图+设计理念取自该订单（records），进入首页臻选上方的「客户晒单」区；客户留言以弹幕播放；可按单设置专属回馈（私下联系客户）。</p>' +
         '<div class="b3-row" style="margin:4px 0 10px;">' +
         '<span style="font-size:13px;color:var(--text-dark);font-weight:600;">减免金额：</span>' +
         '<input id="b3DiscountCfg" class="b3-discount" type="number" min="0" step="1" value="10">' +
