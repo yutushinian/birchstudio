@@ -160,8 +160,7 @@
       '<header class="b3-shares-head">' +
       '<div class="b3-shares-tt">' +
       '<span class="b3-shares-eyebrow">CUSTOMER · 客户授权晒单</span>' +
-      '<h2>客户晒单 · 与臻选同款呈现</h2>' +
-      '<p>以下均为客户<b>授权同意</b>后展示：与其订单一致（图片 / 品名 / 设计理念）；客户留言会在顶部以弹幕滚动播放</p>' +
+      '<h2>客户晒单</h2>' +
       '</div>' +
       '<a class="b3-shares-cta" href="javascript:void 0" onclick="window.__b3GoVerify()">持有官方码？晒单展示 →</a>' +
       '</header>' +
@@ -268,16 +267,17 @@
     var grid = $('b3ShareGrid');
     if (!grid) return;
     var approved = (rows || []).filter(function (s) { return s.approved === true; });
+    var cardRows = approved.filter(function (s) { return s.code && String(s.code).trim() !== ''; });
     dmQueue = approved.filter(function (s) { return s.comment && String(s.comment).trim().length > 1; })
-      .map(function (s) { return { name: (s.name || '白桦客户').slice(0, 12), txt: bulletText(s.comment), extra: '' }; });
+      .map(function (s) { return { name: (s.name || '白桦精选').slice(0, 12), txt: bulletText(s.comment), extra: '' }; });
     var line = $('b3DmLine');
     if (line) line.style.display = dmQueue.length ? 'block' : 'none';
-    if (!approved.length) {
+    if (!cardRows.length) {
       grid.innerHTML = '<div class="b3-empty2">✨ 还没有客户授权晒单<br>持有官方码 → 官方验证 → 授权晒单（可选留言）→ 提交后自动展示于此<br><button class="b3-btn b3-btn-gold" style="margin-top:12px;" onclick="window.__b3GoVerify()">📸 去授权晒单</button></div>';
       return;
     }
     b3SData = [];
-    grid.innerHTML = approved.slice(0, 30).map(function (s) {
+    grid.innerHTML = cardRows.slice(0, 30).map(function (s) {
       var rc = recMap ? recMap[String(s.code)] : null;
       return shareCard(s, rc);
     }).join('');
@@ -540,6 +540,11 @@
         '<button class="b3-tab on" data-t="approved" onclick="window.__b3SecTab(\'approved\')">✅ 显示中</button>' +
         '<button class="b3-tab" data-t="pending" onclick="window.__b3SecTab(\'pending\')">🙈 已隐藏</button>' +
         '<button class="b3-tab" data-t="all" onclick="window.__b3SecTab(\'all\')">全部</button></div>' +
+        '<div style="display:flex;gap:6px;align-items:center;margin:8px 0 10px;flex-wrap:wrap;background:rgba(255,255,255,.7);border:1px solid rgba(74,124,89,.3);border-radius:12px;padding:8px;">' +
+        '<span style="font-size:12.5px;color:#2f5c40;font-weight:700;">＋ 手动新增弹幕</span>' +
+        '<input id="b3ManualText" placeholder="弹幕内容（≤120 字）" style="flex:1;min-width:150px;border:1px solid rgba(74,124,89,.4);border-radius:8px;padding:8px 10px;font-size:13px;background:#fff;">' +
+        '<input id="b3ManualName" placeholder="署名（默认 白桦精选）" style="width:120px;border:1px solid rgba(74,124,89,.4);border-radius:8px;padding:8px 10px;font-size:12.5px;background:#fff;">' +
+        '<button class="b3-mini ok" style="flex:0 0 auto;" onclick="window.__b3ManualAdd()">添加</button></div>' +
         '<div id="b3AdminList" class="b3-admin-list" style="margin-top:10px;"></div>';
       var ref = document.getElementById('secNotice') || document.getElementById('secGallery') || home.nextElementSibling;
       if (ref && ref.parentNode) ref.parentNode.insertBefore(secSharesEl, ref);
@@ -589,7 +594,6 @@
       (s.approved
         ? '<button class="b3-mini off" onclick="window.__b3SetShare(' + s.id + ',false)">🙈 隐藏</button>'
         : '<button class="b3-mini ok" onclick="window.__b3SetShare(' + s.id + ',true)">✅ 显示</button>') +
-      '<button class="b3-mini off" onclick="window.__b3MailShare(' + s.id + ')">📨 补发邮件</button>' +
       '<button class="b3-mini del" onclick="window.__b3DelShare(' + s.id + ')">🗑 删除</button>' +
       '</div></div></div>';
   }
@@ -628,14 +632,6 @@
       if (typeof loadWallData === 'function') { /* 下次打开自动刷新 */ }
     } finally { call('hideLoading', []); }
   };
-  window.__b3MailShare = function (id) {
-    var rows = window.__b3AdminRows || [];
-    var rw = null;
-    for (var i = 0; i < rows.length; i++) { if (String(rows[i].id) === String(id)) { rw = rows[i]; break; } }
-    if (!rw) { toast('未找到该条记录'); return; }
-    sendShareMail(rw, '【白桦】授权晒单邮件（后台补发）');
-    toast('📨 已补发邮件到后台指定邮箱');
-  };
   window.__b3SetDiscount = async function (id, btn) {
     var row = btn.closest('.b3-arow');
     var inp = row ? row.querySelector('[data-discount]') : null;
@@ -647,6 +643,26 @@
     var r = await sb.rpc('set_share_discount', { p_id: id, p_discount: v, p_pwd: pwd });
     if (r.error || r.data === false) { toast('保存失败：' + (r.error ? r.error.message : '管理员校验未通过')); return; }
     toast('✅ 该条减免已改为 ¥' + v);
+  };
+  window.__b3ManualAdd = async function () {
+    var txt = ($('b3ManualText') ? $('b3ManualText').value : '').trim();
+    if (txt.length < 1 || txt.length > 120) { toast('弹幕内容需 1~120 字'); return; }
+    var nm = ($('b3ManualName') ? $('b3ManualName').value : '').trim() || '白桦精选';
+    var sb = sup();
+    if (!sb) { toast('数据库未就绪'); return; }
+    try {
+      var r = await sb.from('shares').insert([{
+        code: '', name: nm, batch: '', idea: '', img: '', comment: txt,
+        consent: true, approved: true
+      }]);
+      if (r.error) throw r.error;
+      toast('✅ 已新增弹幕并展示');
+      if ($('b3ManualText')) $('b3ManualText').value = '';
+      refreshShares();
+      renderSharesAdmin();
+    } catch (e) {
+      if (!dbHint(e, '新增')) toast('新增失败：' + ((e && e.message) || e));
+    }
   };
   window.__b3DelShare = async function (id) {
     if (!window.confirm('确定删除该条弹幕/晒单吗？删除后首页卡片与弹幕同步移除，不可恢复。')) return;
