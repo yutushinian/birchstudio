@@ -64,7 +64,8 @@ Deno.serve(async (req) => {
     const kind = payload.kind || "message";
     const title = kind === "order" ? "【白桦】新定制意向"
       : kind === "gallery_submit" ? "【白桦】光集投稿意向"
-      : kind === "message" ? "【白桦】新留言" : "【白桦】新消息";
+      : kind === "message" ? "【白桦】新留言"
+      : kind === "share" ? "【白桦】新授权晒单（弹幕库）" : "【白桦】新消息";
     const lines = Object.entries(payload.fields || payload)
       .filter(([k]) => !["kind", "subject", "to"].includes(k))
       .map(([k, v]) => k + "：" + (v && typeof v === "object" ? JSON.stringify(v, null, 2) : String(v)));
