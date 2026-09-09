@@ -2062,6 +2062,61 @@
   
   
 <script src="js/bundle.js" defer></script>
-<script src="js/features.js"></script></body>
+<script src="js/features.js?v=20260909a"></script><script>
+/* b3-ai-shim 20260909a */
+(function(){
+if(window.__b3AiHook)return;
+var W="https://cplyzukenqxdwhfivlqx.supabase.co/functions/v1/birch-ai";
+function g(n){try{return (0,eval)(n);}catch(e){return void 0;}}
+function toast(m){var t=g("toast");if(typeof t==="function"){try{t(m);}catch(e){}}}
+function v(id){var el=document.getElementById(id);return el?(el.value||"").trim():"";}
+function total(mm){return mm>=10?18:22;}
+function escS(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
+async function aiNew(mode){
+var kind=mode==="hex"?"hex":mode==="bazi"?"bazi":"free",info={};
+if(mode==="bazi"){var lb=g("lastBaziInfo");if(!lb){toast("请先点击「测算喜用」获得排盘结果");return;}
+var zodI=["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"];var yy=Number(v("baziYear"));var zz=yy?zodI[((yy-4)%12+12)%12]:"";
+info={year:v("baziYear"),month:v("baziMonth"),day:v("baziDay"),hour:v("baziHour"),zod:zz};
+if(lb.ganzhi)info.ganzhi=lb.ganzhi;if(lb.dayMaster)info.dayMaster=lb.dayMaster;if(lb.wuxing)info.wuxing=lb.wuxing;}
+else if(mode==="hex"){var lh=g("lastHex")||{};if(!lh.name){toast("请先摇卦，再让 AI 分析");return;}info={name:lh.name,sym:lh.sym,idea:lh.idea,wu:lh.wu};}
+else{info={note:"自由发挥：请给出一串 3-5 种晶石的整套搭配设计、配色与意象（无生辰信息）"};}
+var size=g("braceletSize");var mm=size===10?10:8;
+var sl=g("showLoading");if(typeof sl==="function"){try{sl("小桦正在为您设计并出图","ai");}catch(e){}}
+try{
+var res=await fetch(W,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:"design",kind:kind,info:info,mm:mm})});
+var txt=await res.text();var r=null;try{r=JSON.parse(txt);}catch(e){r=null;}
+if(!res.ok||!r||!r.ok){var er=(r&&(r.error||r.raw))||("HTTP "+res.status);toast("AI 服务错误："+er);
+if(mode==="random"){var rb=g("randomBracelet");if(typeof rb==="function"){try{rb();toast("已用本地随缘搭配代替 ✨");}catch(e2){}}}return;}
+var boxId=mode==="hex"?"aiDesignTop":mode==="bazi"?"baziResult":"aiRandomResult";var o=document.getElementById(boxId);
+if(o){o.style.display="block";var an=String(r.analysis||"");var poem="";var lines=an.split(/\n/);var pi=-1;
+for(var i=0;i<lines.length;i++){if(/^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/.test(lines[i])){pi=i;break;}}
+if(pi>-1){var got=[];for(var j=pi;j<lines.length&&got.length<4;j++){var ln=lines[j].replace(/^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/,"").trim();if(ln)got.push(ln);}poem=got.join("\n");}
+var beads=(r.stones||[]).map(function(b){return '<span style="display:inline-block;background:#f3ead6;border:1px solid #d8c49a;border-radius:999px;padding:3px 10px;margin:3px;font-size:12.5px;color:#7a5c2e;">'+escS(b.name)+" ×"+b.count+"</span>";}).join("");
+var img=r.url?'.<div style="margin-top:12px;text-align:center;"><img src="'+escS(r.url)+'" style="max-width:100%;max-height:320px;border-radius:14px;border:1px solid rgba(201,169,110,.5);" alt="AI设计图"></div>':"";
+o.innerHTML='<div style="background:linear-gradient(165deg,#fdfcf8,#f5f0e2);border:1px solid #c9a96e;border-radius:14px;padding:14px;box-shadow:0 10px 26px rgba(0,0,0,.08);">'
++'<div style="font-weight:800;color:#2f5c40;letter-spacing:.06em;">小桦 · AI 定制设计</div>'
++'<div style="margin-top:10px;color:#3d3229;font-size:13.5px;line-height:2;white-space:pre-wrap;">'+escS(an)+'</div>'
++(beads?'<div style="margin-top:10px;">'+beads+'</div>':"")
++(poem?'<div style="margin-top:10px;font-style:italic;color:#8a6d3b;font-size:14px;white-space:pre-wrap;">'+escS(poem)+'</div>':"")
++img+'<div style="font-size:10.5px;color:#8a9a88;margin-top:8px;">AI 生图预览（点击放大）· 以上为文化意象参考</div></div>';}
+var lib=[];try{lib=g("availableCrystals")()||[];}catch(e){}
+var cb=g("clearBracelet");if(typeof cb==="function"){try{cb();}catch(e){}}
+var bb=g("braceletBeads");var pushed=[];var tot=total(mm);
+for(var bi=0;bi<(r.stones||[]).length;bi++){var st=(r.stones||[])[bi];var need=Number(st.count)||0;var found=null;
+for(var li=0;li<lib.length;li++){if(lib[li].name===st.name){found=lib[li];break;}}
+if(found){for(var k=0;k<need&&pushed.length<tot;k++)pushed.push(found);}}
+while(pushed.length<tot&&lib.length)pushed.push(lib[Math.floor(Math.random()*lib.length)]);
+if(Array.isArray(bb)){bb.length=0;for(var p2=0;p2<pushed.length;p2++)bb.push(pushed[p2]);var db=g("drawBracelet");if(typeof db==="function"){try{db();}catch(e){}}}
+toast("✅ AI 设计完成："+((r.stones||[]).length)+" 种晶石 · "+tot+" 颗 · 已出图");
+var cq=g("consumeAiQuota");if(typeof cq==="function"){try{cq();}catch(e){}}
+}catch(e){toast("AI 调用失败："+((e&&e.message)||e));if(mode==="random"){var rb2=g("randomBracelet");if(typeof rb2==="function"){try{rb2();toast("已用本地随缘搭配代替 ✨");}catch(e2){}}}}
+finally{var hl=g("hideLoading");if(typeof hl==="function"){try{hl();}catch(e){}}}
+}
+var orig=g("aiDesign");
+window.aiDesign=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){aiNew(mode);}else if(typeof orig==="function"){orig(mode);}};
+var oc=g("oneClickConfig");if(typeof oc==="function"){window.oneClickConfig=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){window.aiDesign(mode);}else{oc(mode);}};}
+window.__b3AiHook=1;window.__b3v="20260909a";
+})();
+</script></body>
 
 </html>
