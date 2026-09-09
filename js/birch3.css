@@ -192,3 +192,35 @@
   #customizePanel #baziResult,#customizePanel #aiDesignTop,#customizePanel #aiRandomResult{margin-top:8px}
 }
 
+
+/* ============================================================
+ * 客户授权分享区（首页内嵌，位于「臻选推荐」正上方）
+ * ============================================================ */
+.b3-fab{display:none!important} /* 旧浮层按钮兜底隐藏 */
+.b3-shares{position:relative;width:100%;background:linear-gradient(180deg,#faf6ec,#f4efe1);}
+.b3-shares-inner{max-width:1060px;margin:0 auto;padding:34px 18px 40px;box-sizing:border-box}
+.b3-shares-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.b3-shares-tt .b3-shares-eyebrow{font-family:Georgia,'Times New Roman',serif;text-transform:uppercase;letter-spacing:.3em;font-size:11px;color:#b08a44;display:block;margin-bottom:8px}
+.b3-shares-tt h2{margin:0 0 6px;font-size:clamp(20px,3.4vw,28px);letter-spacing:.1em;color:#2c3a2b;font-weight:800}
+.b3-shares-tt p{margin:0;font-size:12.5px;color:#6b7a66;line-height:1.8}
+.b3-shares-tt p b{color:#8a6d3b}
+.b3-shares-cta{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(74,124,89,.45);color:#2f5c40;
+  background:#fff;border-radius:999px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;text-decoration:none;box-shadow:0 4px 12px rgba(47,92,64,.08)}
+/* 弹幕条 */
+.b3-dm-line{position:relative;height:56px;border-radius:14px;overflow:hidden;margin-bottom:16px;
+  background:radial-gradient(120% 160% at 85% 0%,rgba(201,169,110,.3),transparent 55%),linear-gradient(160deg,#22301f,#2c4226);
+  box-shadow:0 8px 20px rgba(20,30,18,.25);}
+.b3-dm-line .b3-dm-hint{position:absolute;left:12px;top:50%;transform:translateY(-50%);z-index:2;font-size:10.5px;color:#d8c9a3;letter-spacing:.16em;
+  background:rgba(0,0,0,.3);padding:4px 10px;border-radius:999px;border:1px solid rgba(231,213,168,.4);white-space:nowrap}
+.b3-dm-line .b3-dm-layer{position:absolute;inset:0;overflow:hidden}
+.b3-share-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.b3-share-grid .b3-card{background:#fff;border:1px solid rgba(74,124,89,.28);border-radius:14px;overflow:hidden;cursor:pointer;position:relative;transition:transform .25s,box-shadow .25s}
+.b3-share-grid .b3-card:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(47,92,64,.14)}
+.b3-empty2{text-align:center;color:#7a8a76;font-size:13px;line-height:2;padding:26px 12px;background:rgba(255,255,255,.6);
+  border:1px dashed rgba(74,124,89,.4);border-radius:16px}
+@media(max-width:720px){
+  .b3-shares-inner{padding:24px 14px 30px}
+  .b3-share-grid{grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px}
+  .b3-shares-cta{width:100%;justify-content:center;margin-top:2px}
+  .b3-dm-line{height:52px}
+}
