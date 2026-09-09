@@ -223,17 +223,26 @@
       return { rows: rows, recMap: recMap };
     } catch (e) { dbHint(e, ''); return { rows: [], recMap: {} }; }
   }
-  /* 卡片样式对齐臻品橱窗：图片 + 品名 + 设计理念（来自订单记录） */
-  function shareCard(s, idea) {
-    var img = firstImg(s.img);
-    var media = img ? (isVideo(img) ? '<video class="b3-card-img" src="' + esc(img) + '" muted loop playsinline></video>'
-      : '<img class="b3-card-img" src="' + esc(img) + '" loading="lazy" onerror="this.style.display=\'none\'">')
-      : '<div class="b3-card-img-ph">💎</div>';
-    return '<div class="b3-card" onclick="window.__b3Lightbox(\'\',\'' + esc(img).replace(/'/g, '') + '\',\'' + esc(String(s.name || '白桦定制')).replace(/'/g, '') + '\')">' +
+  /* 订单图 → 可显示地址（与橱窗一致走 fullImg 解析） */
+  function absImg(u) {
+    if (!u) return '';
+    var f = get('fullImg');
+    if (typeof f === 'function') { try { var a = f(u); if (a) return a; } catch (e) {} }
+    if (/^(https?:|data:|blob:)/i.test(u)) return u;
+    return u;
+  }
+  /* 卡片与臻品橱窗(gallery-item)完全一致：图片 + 居中品名；点击看图（说明含设计理念） */
+  function shareCard(s, rc) {
+    var img = absImg(s.img || (rc && rc.image_url) || '');
+    var name = s.name || (rc && rc.product_name) || '白桦定制';
+    var idea = rc && rc.message ? String(rc.message) : (s.idea || '');
+    var media = img ? (isVideo(img) ? '<video src="' + esc(img) + '" muted loop playsinline></video>'
+      : '<img src="' + esc(img) + '" alt="' + esc(name) + '" loading="lazy">')
+      : '<div style="width:100%;height:160px;display:flex;align-items:center;justify-content:center;background:#e8f5ef;font-size:30px;">💎</div>';
+    return '<div class="gallery-item b3-share-item" onclick="window.__b3Lightbox(\'' + esc(idea).replace(/'/g, '') + '\',\'' + esc(img).replace(/'/g, '') + '\',\'' + esc(name).replace(/'/g, '') + '\')">' +
       media +
-      '<div class="b3-card-body"><div class="b3-card-name">' + esc(s.name || '白桦定制') + '</div>' +
-      (idea ? '<div class="b3-card-idea">' + esc(idea) + '</div>' : '') +
-      '</div></div>';
+      '<div class="gallery-name">' + esc(name) + '</div>' +
+      '</div>';
   }
   function renderShareSection(rows, recMap) {
     var grid = $('b3ShareGrid');
@@ -249,8 +258,7 @@
     }
     grid.innerHTML = approved.slice(0, 30).map(function (s) {
       var rc = recMap ? recMap[String(s.code)] : null;
-      var idea = rc && rc.message ? rc.message : (s.idea || '');
-      return shareCard(s, idea);
+      return shareCard(s, rc);
     }).join('');
   }
   async function refreshShares() {
