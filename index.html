@@ -2092,7 +2092,7 @@ if(o){o.style.display="block";var an=String(r.analysis||"");var poem="";var line
 for(var i=0;i<lines.length;i++){if(/^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/.test(lines[i])){pi=i;break;}}
 if(pi>-1){var got=[];for(var j=pi;j<lines.length&&got.length<4;j++){var ln=lines[j].replace(/^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/,"").trim();if(ln)got.push(ln);}poem=got.join("\n");}
 var beads=(r.stones||[]).map(function(b){return '<span style="display:inline-block;background:#f3ead6;border:1px solid #d8c49a;border-radius:999px;padding:3px 10px;margin:3px;font-size:12.5px;color:#7a5c2e;">'+escS(b.name)+" ×"+b.count+"</span>";}).join("");
-var img=r.url?'.<div style="margin-top:12px;text-align:center;"><img src="'+escS(r.url)+'" style="max-width:100%;max-height:320px;border-radius:14px;border:1px solid rgba(201,169,110,.5);" alt="AI设计图"></div>':"";
+var img=r.url?'<div style="margin-top:12px;text-align:center;"><img src="'+escS(r.url)+'" style="max-width:100%;max-height:320px;border-radius:14px;border:1px solid rgba(201,169,110,.5);" alt="AI设计图"></div>':"";
 o.innerHTML='<div style="background:linear-gradient(165deg,#fdfcf8,#f5f0e2);border:1px solid #c9a96e;border-radius:14px;padding:14px;box-shadow:0 10px 26px rgba(0,0,0,.08);">'
 +'<div style="font-weight:800;color:#2f5c40;letter-spacing:.06em;">小桦 · AI 定制设计</div>'
 +'<div style="margin-top:10px;color:#3d3229;font-size:13.5px;line-height:2;white-space:pre-wrap;">'+escS(an)+'</div>'
