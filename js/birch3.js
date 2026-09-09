@@ -130,7 +130,25 @@
   /* ============================================================
    * 客户授权分享区（首页「臻选推荐」正上方内嵌）+ 留言弹幕
    * ============================================================ */
-  var dmTimer = null, dmQueue = [], dmColors = ['b3-dm-1', 'b3-dm-2', 'b3-dm-3'];
+  var dmTimer = null, dmQueue = [], dmColors = ['b3-dm-1', 'b3-dm-2', 'b3-dm-3'], b3SData = [];
+  var EMAIL_URL = (get('SUPABASE_URL') || '').replace(/\/$/, '') + '/functions/v1/email-send';
+  function sendShareMail(row, subject) {
+    try {
+      if (!EMAIL_URL) return;
+      fetch(EMAIL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'share',
+          subject: subject || '【白桦】新授权晒单（弹幕库）',
+          fields: {
+            官方码: row.code || '', 品名: row.name || '', 专属编号: row.batch || '',
+            留言: row.comment || '（未留言）', 提交时间: new Date().toLocaleString('zh-CN')
+          }
+        })
+      }).catch(function () {});
+    } catch (e) {}
+  }
   function ensureShareSection() {
     var sec = $('b3ShareSec');
     if (sec) return sec;
@@ -195,7 +213,7 @@
       if (i >= dmQueue.length) i = 0;
       var q = dmQueue[i++];
       if (!q) return;
-      pushBullet('<span>' + esc(q.name) + '：</span>' + esc(q.txt) + (q.extra ? ' <b>' + esc(q.extra) + '</b>' : ''));
+      pushBullet(esc(q.txt));
     }, 1100);
   }
   function stopDanmaku() {
@@ -236,10 +254,12 @@
     var img = absImg(s.img || (rc && rc.image_url) || '');
     var name = s.name || (rc && rc.product_name) || '白桦定制';
     var idea = rc && rc.message ? String(rc.message) : (s.idea || '');
+    var idx = b3SData.length;
+    b3SData.push({ img: img, name: name, idea: idea });
     var media = img ? (isVideo(img) ? '<video src="' + esc(img) + '" muted loop playsinline></video>'
       : '<img src="' + esc(img) + '" alt="' + esc(name) + '" loading="lazy">')
       : '<div style="width:100%;height:160px;display:flex;align-items:center;justify-content:center;background:#e8f5ef;font-size:30px;">💎</div>';
-    return '<div class="gallery-item b3-share-item" onclick="window.__b3Lightbox(\'' + esc(idea).replace(/'/g, '') + '\',\'' + esc(img).replace(/'/g, '') + '\',\'' + esc(name).replace(/'/g, '') + '\')">' +
+    return '<div class="gallery-item b3-share-item" onclick="window.__b3OpenShareImg(' + idx + ')">' +
       media +
       '<div class="gallery-name">' + esc(name) + '</div>' +
       '</div>';
@@ -253,14 +273,19 @@
     var line = $('b3DmLine');
     if (line) line.style.display = dmQueue.length ? 'block' : 'none';
     if (!approved.length) {
-      grid.innerHTML = '<div class="b3-empty2">✨ 还没有客户授权晒单<br>持有官方码 → 官方验证 → 授权晒单（可选留言）→ 审核通过后即展示于此<br><button class="b3-btn b3-btn-gold" style="margin-top:12px;" onclick="window.__b3GoVerify()">📸 去授权晒单</button></div>';
+      grid.innerHTML = '<div class="b3-empty2">✨ 还没有客户授权晒单<br>持有官方码 → 官方验证 → 授权晒单（可选留言）→ 提交后自动展示于此<br><button class="b3-btn b3-btn-gold" style="margin-top:12px;" onclick="window.__b3GoVerify()">📸 去授权晒单</button></div>';
       return;
     }
+    b3SData = [];
     grid.innerHTML = approved.slice(0, 30).map(function (s) {
       var rc = recMap ? recMap[String(s.code)] : null;
       return shareCard(s, rc);
     }).join('');
   }
+  window.__b3OpenShareImg = function (i) {
+    var o = b3SData[i];
+    if (o) window.__b3Lightbox(o.idea, o.img, o.name);
+  };
   async function refreshShares() {
     try {
       ensureShareSection();
@@ -331,10 +356,10 @@
       '</div></div>';
     var prefix = '<div class="b3-form">';
     if (state && state.approved) {
-      return prefix + '<div class="b3-status ok"><div class="big">✅ 已授权展示</div>该晒单已审核通过，展示在首页「客户晒单」区（留言以弹幕播放）。<br>联系微信可了解更多。<br><br>' + wechatBtn() + '</div></div>';
+      return prefix + '<div class="b3-status ok"><div class="big">✅ 已授权展示</div>该晒单当前展示在首页「客户晒单」区（留言以弹幕播放）。<br>联系微信可了解更多。<br><br>' + wechatBtn() + '</div></div>';
     }
     if (state && !state.approved) {
-      return prefix + '<div class="b3-status warn"><div class="big">⏳ 审核中</div>该官方码已提交晒单，正在等待审核（或已被下架）。<br>审核通过后展示在首页客户晒单区，留言以弹幕播放。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:8px;"><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3RefreshState()">↻ 刷新状态</button><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3ResetShare()">✎ 重新晒单</button></div></div></div>';
+      return prefix + '<div class="b3-status warn"><div class="big">ℹ️ 当前未展示</div>该官方码曾授权晒单，目前首页未展示（可能已被品牌方隐藏或删除）。<br>如需重新晒单请点下方按钮。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:8px;"><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3RefreshState()">↻ 刷新状态</button><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3ResetShare()">✎ 重新晒单</button></div></div></div>';
     }
     return prefix +
       '<div class="b3-quote">同意授权后，您的订单将按原样展示在首页「客户晒单」区（图片 / 品名 / 设计理念取自订单记录）；<br>下方可选是否留言，留言会以弹幕播放。</div>' +
@@ -411,19 +436,20 @@
         code: String(code), name: shareRec ? (shareRec.product_name || '') : '',
         batch: shareRec ? (shareRec.batch_no || '') : '', idea: '',
         img: img, comment: comment, discount: shareDiscount,
-        contact: '', consent: true, approved: false
+        contact: '', consent: true, approved: true
       };
       var r = await sb.from('shares').insert([row]);
       if (r.error) throw r.error;
       var map = localMap();
-      map[String(code)] = { approved: false, discount: shareDiscount, ts: Date.now() };
+      map[String(code)] = { approved: true, discount: shareDiscount, ts: Date.now() };
       localSave(map);
+      sendShareMail(row);
       hidePanel(sharePanel);
       var p = ensureSharePanel();
       var msgLine = comment ? '· 您的留言将<b>以弹幕</b>滚动播放' : '· 未留言：仅展示订单卡片';
-      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单已提交</div>审核通过后：<br>· 将展示在首页<b>「客户晒单」</b>区<br>' + msgLine + '<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看客户晒单区</button></div></div>';
+      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单已提交</div>已即时展示在首页<b>「客户晒单」</b>区<br>' + msgLine + '<br>· 已自动<b>邮件通知品牌方</b>（可在后台弹幕管理库调整显示）<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看客户晒单区</button></div></div>';
       showPanel(p);
-      toast('✅ 已提交，审核通过后即展示在首页');
+      toast('✅ 已提交并展示，已邮件通知品牌方');
     } catch (e) {
       if (!dbHint(e, '提交')) toast('提交失败：' + (e && e.message ? e.message : e));
       if (btn) { btn.disabled = false; btn.textContent = '✅ 同意授权 · 提交晒单'; }
@@ -451,16 +477,17 @@
     var d = document.createElement('div');
     d.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
     d.innerHTML = '<button class="b3-btn b3-btn-main" style="flex:1;min-width:150px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3OpenShare()">✅ 晒单授权分享</button>' +
-      '<button class="b3-btn b3-btn-gold" style="flex:1;min-width:120px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3Wheel()">🎡 幸运转盘立减</button>';
+      '<button class="b3-btn b3-btn-gold" id="b3WheelCta" style="flex:1;min-width:120px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3Wheel()">🎡 幸运转盘减免</button>';
     wrap.appendChild(d);
     var tip = document.createElement('div');
     tip.className = 'b3-muted';
     tip.style.cssText = 'font-size:11px;color:#6b7a66;';
-    tip.textContent = '同意授权晒单（图片 / 品名 / 设计理念取自订单），审核通过后展示在首页「客户晒单」区；留言以弹幕播放';
+    tip.textContent = '同意授权晒单（图片 / 品名 / 设计理念取自订单），提交后即展示在首页「客户晒单」区，并邮件通知品牌方；留言以弹幕播放';
     wrap.appendChild(tip);
     var browse = $('browseBtn');
     if (browse && browse.parentNode === rp) rp.insertBefore(wrap, browse);
     else rp.appendChild(wrap);
+    try { window.__b3SyncWheelCta(id); } catch (e) {}
     ctaInjected = true;
   }
   window.__b3OpenShare = function () {
@@ -479,9 +506,9 @@
   }
 
   /* ============================================================
-   * 管理后台：分享审核库（一行一条）
+   * 管理后台：弹幕管理库（每行一条晒单/留言；可显隐/删除；自动邮件）
    * ============================================================ */
-  var secSharesEl = null, secTab = 'pending';
+  var secSharesEl = null, secTab = 'approved';
   function ensureAdminUI() {
     var home = $('adminHome');
     if (!home) return;
@@ -493,7 +520,7 @@
         card.className = 'admin-card';
         card.id = 'b3AdminCard';
         card.setAttribute('onclick', "openAdminSection('secShares')");
-        card.innerHTML = '<div class="admin-card-cover"><span class="admin-chip">📣</span></div><div class="admin-card-info"><div class="admin-card-name">分享审核库</div><div class="admin-card-desc" style="font-size:11px;color:var(--text-light);">晒单评论 · 授权分享 · 一行一条</div></div>';
+        card.innerHTML = '<div class="admin-card-cover"><span class="admin-chip">📣</span></div><div class="admin-card-info"><div class="admin-card-name">弹幕管理库</div><div class="admin-card-desc" style="font-size:11px;color:var(--text-light);">晒单/留言自动入库 · 每行一条 · 可显隐/删除</div></div>';
         grid.appendChild(card);
       }
     }
@@ -504,20 +531,15 @@
       secSharesEl.id = 'secShares';
       secSharesEl.innerHTML =
         '<button class="back-btn" onclick="goBackAdmin()">← 返回</button>' +
-        '<h3 style="margin-bottom:6px;color:var(--text-dark)">📣 分享审核库（客户晒单 · 授权分享）</h3>' +
-        '<p style="font-size:12px;color:var(--text-light);margin-bottom:6px;line-height:1.9;">客户在「官方验证」后提交的晒单评论在此<b>一行一条</b>显示。点「通过上墙」后：产品图+设计理念取自该订单（records），进入首页臻选上方的「客户晒单」区；客户留言以弹幕播放；可按单设置专属回馈（私下联系客户）。</p>' +
-        '<div class="b3-row" style="margin:4px 0 10px;">' +
-        '<span style="font-size:13px;color:var(--text-dark);font-weight:600;">减免金额：</span>' +
-        '<input id="b3DiscountCfg" class="b3-discount" type="number" min="0" step="1" value="10">' +
-        '<span style="font-size:12px;color:var(--text-light);">元</span>' +
-        '<button class="b3-mini ok" onclick="window.__b3SaveDiscountCfg()">保存默认减免</button>' +
-        '<span style="flex:1"></span>' +
-        '<span style="font-size:12px;color:var(--text-light);" id="b3SecStats"></span></div>' +
+        '<h3 style="margin-bottom:6px;color:var(--text-dark)">💬 弹幕管理库（客户晒单 · 每行一条）</h3>' +
+        '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;line-height:1.9;">客户「官方验证 → 授权晒单（可选留言）」后<b>自动入库并即时展示</b>，同时自动发邮件到后台指定邮箱（设置 → 邮件设置可改收件人）。此处统一管理：<b>显示 / 隐藏 / 删除</b>某条（隐藏后不再上首页卡片与弹幕）。</p>' +
+        '<div class="b3-row" style="margin:2px 0 10px;"><span style="flex:1"></span>' +
+        '<span style="font-size:12px;color:var(--text-light);" id="b3SecStats"></span>' +
+        '<button class="b3-tab" onclick="window.__b3RefreshShares()">↻ 刷新</button></div>' +
         '<div class="b3-admin-tabs">' +
-        '<button class="b3-tab on" data-t="pending" onclick="window.__b3SecTab(\'pending\')">⏳ 待审核</button>' +
-        '<button class="b3-tab" data-t="approved" onclick="window.__b3SecTab(\'approved\')">✅ 已上墙</button>' +
-        '<button class="b3-tab" data-t="all" onclick="window.__b3SecTab(\'all\')">全部</button>' +
-        '<button class="b3-tab" style="margin-left:auto;" onclick="window.__b3RefreshShares()">↻ 刷新分享数据</button></div>' +
+        '<button class="b3-tab on" data-t="approved" onclick="window.__b3SecTab(\'approved\')">✅ 显示中</button>' +
+        '<button class="b3-tab" data-t="pending" onclick="window.__b3SecTab(\'pending\')">🙈 已隐藏</button>' +
+        '<button class="b3-tab" data-t="all" onclick="window.__b3SecTab(\'all\')">全部</button></div>' +
         '<div id="b3AdminList" class="b3-admin-list" style="margin-top:10px;"></div>';
       var ref = document.getElementById('secNotice') || document.getElementById('secGallery') || home.nextElementSibling;
       if (ref && ref.parentNode) ref.parentNode.insertBefore(secSharesEl, ref);
@@ -557,18 +579,17 @@
   function adminRow(s) {
     var img = firstImg(s.img);
     var media = img ? (isVideo(img) ? '<video class="b3-card-img" src="' + esc(img) + '" muted playsinline></video>' : '<img class="b3-card-img" src="' + esc(img) + '" loading="lazy" onerror="this.style.display=\'none\'">') : '<div class="b3-card-img-ph" style="width:58px;height:58px;flex:0 0 58px;font-size:20px;">💎</div>';
-    var st = s.approved ? '<span style="color:#4a7c59;font-weight:700;">✅ 已上墙</span>' : '<span style="color:#d4a03d;font-weight:700;">⏳ 待审核</span>';
+    var st = s.approved ? '<span style="color:#4a7c59;font-weight:700;">✅ 显示中</span>' : '<span style="color:#d4a03d;font-weight:700;">🙈 已隐藏</span>';
     return '<div class="b3-arow" data-id="' + s.id + '">' + media +
       '<div class="b3-arow-info"><div class="t">' + esc(s.name || '白桦定制') + '　' + st + '</div>' +
       '<div class="c">码 ' + esc(s.code || '') + (s.batch ? ' · ' + esc(s.batch) : '') + ' · ' + fmtTime(s.created_at) + (s.consent ? ' · 已授权' : ' · ⚠️未授权') + '</div>' +
       (s.comment ? '<div class="m">💬 ' + esc(s.comment) + '</div>' : '') +
       (s.idea ? '<div class="m" style="background:#f2f4ef;">✨ ' + esc(s.idea) + '</div>' : '') +
       '<div class="b3-arow-ops">' +
-      '<span style="font-size:12px;color:#6b7a66;">减免 ¥</span><input class="b3-discount" data-discount value="' + esc(String(s.discount == null ? '' : s.discount)) + '">' +
       (s.approved
-        ? '<button class="b3-mini off" onclick="window.__b3SetShare(' + s.id + ',false)">⬇️ 下架</button>'
-        : '<button class="b3-mini ok" onclick="window.__b3SetShare(' + s.id + ',true)">✅ 通过上墙</button>') +
-      '<button class="b3-mini off" onclick="window.__b3SetDiscount(' + s.id + ',this)">存金额</button>' +
+        ? '<button class="b3-mini off" onclick="window.__b3SetShare(' + s.id + ',false)">🙈 隐藏</button>'
+        : '<button class="b3-mini ok" onclick="window.__b3SetShare(' + s.id + ',true)">✅ 显示</button>') +
+      '<button class="b3-mini off" onclick="window.__b3MailShare(' + s.id + ')">📨 补发邮件</button>' +
       '<button class="b3-mini del" onclick="window.__b3DelShare(' + s.id + ')">🗑 删除</button>' +
       '</div></div></div>';
   }
@@ -579,35 +600,41 @@
     var rows = await listSharesAll();
     if (rows === null) { listEl.innerHTML = '<div class="b3-empty">读取失败：请确认已用管理员账号进入后台（管理员密码在左侧顶栏登录）。</div>'; return; }
     var all = rows;
+    window.__b3AdminRows = all;
     var filtered = secTab === 'all' ? all : all.filter(function (s) { return secTab === 'approved' ? s.approved : !s.approved; });
     var st = $('b3SecStats');
     if (st) {
-      var p = all.filter(function (s) { return !s.approved; }).length;
-      st.textContent = '共 ' + all.length + ' 条 · 待审核 ' + p + ' 条';
+      var on = all.filter(function (s) { return s.approved; }).length;
+      var off = all.length - on;
+      st.textContent = '共 ' + all.length + ' 条 · 显示中 ' + on + ' · 已隐藏 ' + off;
     }
     if (!filtered.length) {
-      listEl.innerHTML = '<div class="b3-empty">' + (secTab === 'pending' ? '🎉 没有待审核的晒单' : '暂无记录') + '<br>客户在「官方验证」页提交晒单评论后即在此显示。</div>';
+      listEl.innerHTML = '<div class="b3-empty">' + (secTab === 'pending' ? '🙈 暂无已隐藏条目' : (secTab === 'approved' ? '✅ 暂无显示中的晒单' : '暂无记录')) + '<br>客户晒单提交后自动进入此库（已发邮件通知）。</div>';
       return;
     }
     listEl.innerHTML = filtered.map(adminRow).join('');
-    var dCfg = $('b3DiscountCfg');
-    if (dCfg) {
-      var cur = await getDiscountCfg();
-      dCfg.value = cur;
-    }
   }
   window.__b3SetShare = async function (id, approved) {
     var pwd = adminPwd();
     if (!pwd) return;
-    call('showLoading', [approved ? '正在上墙…' : '正在下架…']);
+    call('showLoading', [approved ? '正在显示…' : '正在隐藏…']);
     try {
       var sb = sup();
       var r = await sb.rpc('set_share_approved', { p_id: id, p_approved: approved, p_pwd: pwd });
       if (r.error || r.data === false) { toast('操作失败：' + (r.error ? r.error.message : '管理员校验未通过')); return; }
-      toast(approved ? '✅ 已通过上墙（评论将进入弹幕播放）' : '已下架');
+      toast(approved ? '✅ 已显示（首页卡片与弹幕已恢复）' : '🙈 已隐藏（首页与弹幕同步移除）');
+      refreshShares();
       renderSharesAdmin();
       if (typeof loadWallData === 'function') { /* 下次打开自动刷新 */ }
     } finally { call('hideLoading', []); }
+  };
+  window.__b3MailShare = function (id) {
+    var rows = window.__b3AdminRows || [];
+    var rw = null;
+    for (var i = 0; i < rows.length; i++) { if (String(rows[i].id) === String(id)) { rw = rows[i]; break; } }
+    if (!rw) { toast('未找到该条记录'); return; }
+    sendShareMail(rw, '【白桦】授权晒单邮件（后台补发）');
+    toast('📨 已补发邮件到后台指定邮箱');
   };
   window.__b3SetDiscount = async function (id, btn) {
     var row = btn.closest('.b3-arow');
@@ -622,7 +649,7 @@
     toast('✅ 该条减免已改为 ¥' + v);
   };
   window.__b3DelShare = async function (id) {
-    if (!window.confirm('确定删除这条分享吗？删除后将从分享墙/弹幕移除，且不可恢复。')) return;
+    if (!window.confirm('确定删除该条弹幕/晒单吗？删除后首页卡片与弹幕同步移除，不可恢复。')) return;
     var pwd = adminPwd();
     if (!pwd) return;
     var sb = sup();
@@ -630,6 +657,76 @@
     if (r.error || r.data === false) { toast('删除失败：' + (r.error ? r.error.message : '管理员校验未通过')); return; }
     toast('🗑 已删除');
     renderSharesAdmin();
+  };
+
+  /* ---- 幸运转盘按码开关（records.wheel_enabled） ---- */
+  var dbWheelBusy = false;
+  function __b3DbWheelUI() {
+    var wrap = $('dbListWrap');
+    if (!wrap || dbWheelBusy) return;
+    var sb = sup();
+    if (!sb) return;
+    dbWheelBusy = true;
+    sb.from('records').select('id,wheel_enabled').limit(300).then(function (r) {
+      dbWheelBusy = false;
+      var st = {};
+      if (!r.error && r.data) r.data.forEach(function (x) { st[String(x.id)] = x.wheel_enabled !== false; });
+      var rows = wrap.querySelectorAll('.db-record');
+      for (var i = 0; i < rows.length; i++) {
+        var id = rows[i].getAttribute('data-id');
+        var box = rows[i].querySelector('.b3-wheel-box');
+        if (!box) {
+          box = document.createElement('div');
+          box.className = 'b3-wheel-box';
+          box.style.cssText = 'display:flex;align-items:center;gap:6px;margin:6px 0 2px;flex-wrap:wrap;';
+          box.innerHTML = '<span style="font-size:11.5px;color:#6b7a66;">🎡 扫码弹转盘:</span>' +
+            '<button class="b3-mini ok" data-w="1">允许</button>' +
+            '<button class="b3-mini off" data-w="0">禁止</button>';
+          box.addEventListener('click', function (ev) {
+            var btn = ev.target.closest('button');
+            if (!btn) return;
+            var rowEl = btn.closest('.db-record');
+            var rid = rowEl ? rowEl.getAttribute('data-id') : '';
+            var en = btn.getAttribute('data-w') === '1';
+            if (!rid) return;
+            var pwd = adminPwd();
+            if (!pwd) { toast('请先登录管理员账号'); return; }
+            var s2 = sup();
+            if (!s2) return;
+            s2.rpc('update_record_wheel', { p_id: rid, p_enabled: en, p_pwd: pwd }).then(function (rr) {
+              if (rr.error || rr.data === false) { if (!dbHint(rr.error, '转盘开关')) toast('操作失败：' + ((rr.error && rr.error.message) || '校验未通过')); return; }
+              toast(en ? '✅ 该码扫码后允许弹幸运转盘' : '该码扫码后不再弹幸运转盘');
+              __b3DbWheelUI();
+            });
+          });
+          var main = rows[i].querySelector('.db-record-main') || rows[i];
+          main.appendChild(box);
+        }
+        var on = st[id] !== undefined ? st[id] : true;
+        var bs = box.querySelectorAll('button');
+        if (bs.length) { bs[0].style.opacity = on ? '1' : '.45'; bs[0].style.boxShadow = on ? '0 0 0 2px rgba(74,124,89,.35)' : 'none'; bs[1].style.opacity = on ? '.45' : '1'; bs[1].style.boxShadow = on ? 'none' : '0 0 0 2px rgba(201,169,110,.45)'; }
+      }
+    }).catch(function () { dbWheelBusy = false; });
+  }
+  var oRdl = window.renderDbList;
+  if (typeof oRdl === 'function') {
+    window.renderDbList = function () {
+      var ret = oRdl.apply(window, arguments);
+      setTimeout(__b3DbWheelUI, 80);
+      return ret;
+    };
+  }
+  /* 验证结果：按码决定是否显示「幸运转盘」入口 */
+  window.__b3SyncWheelCta = function (code) {
+    var el = $('b3WheelCta');
+    if (!el || !code) return;
+    var sb = sup();
+    if (!sb) { el.style.display = ''; return; }
+    sb.from('records').select('wheel_enabled').eq('id', String(code)).limit(1).then(function (r) {
+      var on = true;
+      if (!r.error && r.data && r.data.length) on = r.data[0].wheel_enabled !== false;
+      el.style.display = on ? '' : 'none';
+    }).catch(function () {});
   };
 
   /* ============================================================
