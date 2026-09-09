@@ -234,7 +234,7 @@
     var line = $('b3DmLine');
     if (line) line.style.display = dmQueue.length ? 'block' : 'none';
     if (!approved.length) {
-      grid.innerHTML = '<div class="b3-empty2">✨ 还没有客户授权晒单<br>持有官方码 → 官方验证 → 晒单评论（同意授权）→ 审核通过后即展示于此，留言会变成弹幕<br><button class="b3-btn b3-btn-gold" style="margin-top:12px;" onclick="window.__b3GoVerify()">📸 去晒单享减免</button></div>';
+      grid.innerHTML = '<div class="b3-empty2">✨ 还没有客户授权晒单<br>持有官方码 → 官方验证 → 晒单（可选留言）→ 审核通过后即展示于此，留言变成弹幕<br><button class="b3-btn b3-btn-gold" style="margin-top:12px;" onclick="window.__b3GoVerify()">📸 去晒单享减免</button></div>';
       return;
     }
     grid.innerHTML = approved.slice(0, 30).map(shareCard).join('');
@@ -295,33 +295,33 @@
     return 10;
   }
   function shareModalHTML(rec, discount, state) {
-    var imgs = rec && rec.image_url ? (function () { var f = get('splitImages'); try { if (typeof f === 'function') { var a = f(rec.image_url); if (a && a.length) return a; } } catch (e) {} return [rec.image_url]; })() : [];
-    var chips = '';
-    for (var i = 0; i < imgs.length && i < 6; i++) {
-      chips += '<div class="b3-imgchip' + (i === 0 ? ' on' : '') + '" data-i="' + i + '" onclick="window.__b3PickImg(this,' + i + ')">' +
-        (isVideo(imgs[i]) ? '<video src="' + esc(imgs[i]) + '" muted playsinline></video>' : '<img src="' + esc(imgs[i]) + '" loading="lazy">') + '</div>';
-    }
+    var img0 = rec && rec.image_url ? firstImg(rec.image_url) : '';
+    var preview =
+      '<div style="display:flex;gap:12px;align-items:center;background:#fff;border:1px solid rgba(74,124,89,.3);border-radius:14px;padding:10px;margin-bottom:6px;">' +
+      (img0 ? (isVideo(img0) ? '<video style="width:64px;height:64px;border-radius:10px;object-fit:cover;flex:0 0 64px;" src="' + esc(img0) + '" muted playsinline></video>'
+        : '<img style="width:64px;height:64px;border-radius:10px;object-fit:cover;flex:0 0 64px;" src="' + esc(img0) + '" loading="lazy" onerror="this.style.opacity=.15">')
+        : '<div style="width:64px;height:64px;border-radius:10px;flex:0 0 64px;display:flex;align-items:center;justify-content:center;background:#eef2ea;font-size:22px;">💎</div>') +
+      '<div style="flex:1;min-width:0;">' +
+      '<div style="font-size:14px;font-weight:700;color:#2f5c40;">' + esc(rec ? rec.product_name || '白桦定制' : '白桦定制') + '</div>' +
+      '<div style="font-size:11px;color:#8a9a88;margin-top:3px;font-family:monospace;">官方码 ' + esc(rec ? rec.id || '' : '') + (rec && rec.batch_no ? ' · ' + esc(rec.batch_no) : '') + '</div>' +
+      '<div style="font-size:11px;color:#8a9a88;margin-top:3px;">将按订单原样展示图片与信息（无需另选）</div>' +
+      '</div></div>';
     var prefix = '<div class="b3-form">';
     if (state && state.approved) {
-      return prefix + '<div class="b3-status ok"><div class="big">✅ 已授权展示 · 减免已生效</div>该分享已审核通过，展示在首页「客户授权分享」区，留言以弹幕滚动播放。<br>联系微信出示此码即可享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br>' + wechatBtn() + '</div></div>';
+      return prefix + '<div class="b3-status ok"><div class="big">✅ 已授权展示 · 减免已生效</div>该晒单已审核通过，展示在首页「客户授权分享」区，留言以弹幕滚动播放。<br>联系微信出示此码即可享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br>' + wechatBtn() + '</div></div>';
     }
     if (state && !state.approved) {
-      return prefix + '<div class="b3-status warn"><div class="big">⏳ 审核中</div>该官方码已提交晒单评论，正在等待审核（或已被下架）。<br>审核通过后展示在授权分享区、留言成为弹幕，并享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:8px;"><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3RefreshState()">↻ 刷新状态</button><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3ResetShare()">✎ 重新晒单</button></div></div></div>';
+      return prefix + '<div class="b3-status warn"><div class="big">⏳ 审核中</div>该官方码已提交晒单，正在等待审核（或已被下架）。<br>审核通过后展示在授权分享区、留言成为弹幕，并享减免 ¥' + esc(String(state.discount || discount)) + '。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:8px;"><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3RefreshState()">↻ 刷新状态</button><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3ResetShare()">✎ 重新晒单</button></div></div></div>';
     }
     return prefix +
-      '<div class="b3-quote">🎉 晒单评论 + 同意授权分享，审核通过后即可 <b>减免 ¥' + discount + '</b>（联系微信出示本码核销），您的评论还会在客户分享区以弹幕播放。</div>' +
-      '<label>产品（自动带出）</label>' +
-      '<input type="text" value="' + esc(rec ? rec.product_name || '' : '') + '" disabled style="opacity:.75">' +
-      '<label>官方码</label><input type="text" value="' + esc(rec ? rec.id : '') + '" disabled style="opacity:.75;font-family:monospace;">' +
-      (chips ? '<label>选择一张分享图（可换）</label><div class="b3-imgchips">' + chips + '</div>' : '') +
-      '<label>评论 / 寄语 <span style="color:#c25c5c">*</span></label>' +
-      '<textarea id="b3Comment" maxlength="120" placeholder="说说这颗水晶的故事：为什么选择它、佩戴感受、想对白桦说的话…（上墙+弹幕内容，2~120字）"></textarea>' +
-      '<label style="margin-top:4px;">想加入的定制灵感（选填）</label>' +
-      '<input type="text" id="b3Idea" maxlength="80" placeholder="例如：想加入生辰石 / 月相元素…">' +
-      '<label class="b3-check"><input type="checkbox" id="b3Consent" checked><span><b>我同意授权</b>：白桦可将我的评论、产品图与官方码展示于官网「客户分享区」并作为弹幕播放；仅用于品牌展示，不另作他用。</span></label>' +
+      '<div class="b3-quote">🎉 同意授权晒单，审核通过即享 <b>减免 ¥' + discount + '</b>（联系微信出示本码核销）。<br>图片与产品信息取自您的订单，您只需选择是否留言。</div>' +
+      preview +
+      '<label>留言（选填，可不留言）</label>' +
+      '<textarea id="b3Comment" maxlength="120" placeholder="想说点什么就说点什么（≤120 字）：佩戴感受、给白桦的话… 留了言会以弹幕滚动播放；不填则只展示订单。"></textarea>' +
+      '<label class="b3-check"><input type="checkbox" id="b3Consent" checked><span><b>我同意授权</b>：白桦可将我该订单的图片、产品信息与官方码展示于官网「客户授权分享」区；若我填写留言，则一并公开展示并作为弹幕播放。仅用于品牌展示，不另作他用。</span></label>' +
       '<div class="b3-row" style="justify-content:center;margin-top:14px;">' +
-      '<button class="b3-btn b3-btn-main" id="b3SubmitShare">📨 提交晒单 · 享减免</button></div>' +
-      '<div class="b3-muted" style="text-align:center;margin-top:8px;">提交即表示已知晓：审核通过后减免生效；如不想上墙可稍后联系下架。</div></div>';
+      '<button class="b3-btn b3-btn-main" id="b3SubmitShare">✅ 同意授权 · 提交晒单</button></div>' +
+      '<div class="b3-muted" style="text-align:center;margin-top:8px;">提交后由品牌方后台审核，审核通过后展示与减免生效；如需撤下可联系客服。</div></div>';
   }
   window.__b3PickImg = function (el, i) {
     var all = el.parentNode.querySelectorAll('.b3-imgchip');
@@ -369,7 +369,7 @@
     }
     var st = approved ? { approved: true, discount: approved.discount || shareDiscount } : (local ? { approved: false, discount: local.discount || shareDiscount } : null);
     var p = ensureSharePanel();
-    p.innerHTML = head('晒单评论 · 授权分享享减免', 'b3SharePanel') + '<div class="b3-body">' + shareModalHTML(shareRec, shareDiscount, st) + '</div>';
+    p.innerHTML = head('晒单授权 · 留言享减免', 'b3SharePanel') + '<div class="b3-body">' + shareModalHTML(shareRec, shareDiscount, st) + '</div>';
     showPanel(p);
     var btn = $('b3SubmitShare');
     if (btn) btn.onclick = function () { submitShare(code); };
@@ -378,27 +378,15 @@
     var sb = sup();
     if (!sb) { toast('数据库未就绪，请刷新重试'); return; }
     var comment = ($('b3Comment') ? $('b3Comment').value : '').trim();
-    var idea = ($('b3Idea') ? $('b3Idea').value : '').trim();
     var consentEl = $('b3Consent');
-    if (comment.length < 2) { toast('请先写下您的评论（至少 2 个字）'); $('b3Comment') && $('b3Comment').focus(); return; }
-    if (consentEl && !consentEl.checked) { toast('请勾选「同意授权分享」后再提交'); return; }
-    var img = '';
-    if (shareRec && shareRec.image_url) {
-      var chipsWrap = document.querySelector('#b3SharePanel .b3-imgchips');
-      var idx = 0;
-      if (chipsWrap) idx = Number(chipsWrap.getAttribute('data-pick')) || 0;
-      var list = [];
-      var f = get('splitImages');
-      try { if (typeof f === 'function') list = f(shareRec.image_url) || []; } catch (e) {}
-      if (!list.length) list = [shareRec.image_url];
-      img = list[idx] || list[0] || '';
-    }
+    if (consentEl && !consentEl.checked) { toast('请勾选「同意授权」后再提交'); return; }
+    var img = shareRec && shareRec.image_url ? firstImg(shareRec.image_url) : '';
     var btn = $('b3SubmitShare');
     if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
     try {
       var row = {
         code: String(code), name: shareRec ? (shareRec.product_name || '') : '',
-        batch: shareRec ? (shareRec.batch_no || '') : '', idea: idea,
+        batch: shareRec ? (shareRec.batch_no || '') : '', idea: '',
         img: img, comment: comment, discount: shareDiscount,
         contact: '', consent: true, approved: false
       };
@@ -409,12 +397,13 @@
       localSave(map);
       hidePanel(sharePanel);
       var p = ensureSharePanel();
-      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单评论已提交</div>审核通过后：<br>· 您的订单与评论将展示在首页<b>「客户授权分享」</b><br>· 留言会以<b>弹幕</b>滚动播放<br>· 享 <b>减免 ¥' + shareDiscount + '</b>（联系微信出示本码核销）<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看授权分享区</button></div></div>';
+      var msgLine = comment ? '· 您的留言将<b>以弹幕</b>滚动播放' : '· 未留言：仅展示订单卡片';
+      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单已提交</div>审核通过后：<br>· 您的订单将展示在首页<b>「客户授权分享」</b><br>' + msgLine + '<br>· 享 <b>减免 ¥' + shareDiscount + '</b>（联系微信出示本码核销）<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看授权分享区</button></div></div>';
       showPanel(p);
       toast('✅ 已提交，审核通过即减免 ¥' + shareDiscount);
     } catch (e) {
       if (!dbHint(e, '提交')) toast('提交失败：' + (e && e.message ? e.message : e));
-      if (btn) { btn.disabled = false; btn.textContent = '📨 提交晒单 · 享减免'; }
+      if (btn) { btn.disabled = false; btn.textContent = '✅ 同意授权 · 提交晒单'; }
     }
   }
 
@@ -438,13 +427,13 @@
     wrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin:2px 0 10px;';
     var d = document.createElement('div');
     d.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-    d.innerHTML = '<button class="b3-btn b3-btn-main" style="flex:1;min-width:150px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3OpenShare()">📸 晒单评论 · 授权分享减免</button>' +
+    d.innerHTML = '<button class="b3-btn b3-btn-main" style="flex:1;min-width:150px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3OpenShare()">✅ 晒单授权 · 留言享减免</button>' +
       '<button class="b3-btn b3-btn-gold" style="flex:1;min-width:120px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3Wheel()">🎡 幸运转盘立减</button>';
     wrap.appendChild(d);
     var tip = document.createElement('div');
     tip.className = 'b3-muted';
     tip.style.cssText = 'font-size:11px;color:#6b7a66;';
-    tip.textContent = '晒单评论+同意授权分享，审核通过后上墙并减免（评论会在客户分享区以弹幕播放）';
+    tip.textContent = '同意授权晒单（图片取自订单，可留言），审核通过后展示在首页授权区并减免；留言会以弹幕播放';
     wrap.appendChild(tip);
     var browse = $('browseBtn');
     if (browse && browse.parentNode === rp) rp.insertBefore(wrap, browse);
