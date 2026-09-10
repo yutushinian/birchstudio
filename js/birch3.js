@@ -362,7 +362,7 @@
       return prefix + '<div class="b3-status warn"><div class="big">ℹ️ 当前未展示</div>该官方码曾授权晒单，目前首页未展示（可能已被品牌方隐藏或删除）。<br>如需重新晒单请点下方按钮。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:8px;"><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3RefreshState()">↻ 刷新状态</button><button class="b3-btn b3-btn-soft" style="width:auto;padding:8px 16px;font-size:13px;" onclick="window.__b3ResetShare()">✎ 重新晒单</button></div></div></div>';
     }
     return prefix +
-      '<div class="b3-quote">同意授权后，您的订单将按原样展示在首页「客户晒单」区（图片 / 品名 / 设计理念取自订单记录）；<br>下方可选是否留言，留言会以弹幕播放。</div>' +
+      '<div class="b3-quote">同意授权后，您的订单将按原样展示在首页「客户晒单」区（图片 / 品名 / 设计理念取自订单记录）；<br>下方可选是否留言，留言会以弹幕播放；<b>晒单并留言后可享减免 ¥' + discount + '</b>（联系微信出示本码核销）。</div>' +
       preview +
       '<label>留言（选填，可不留言）</label>' +
       '<textarea id="b3Comment" maxlength="120" placeholder="想说点什么就说点什么（≤120 字）：佩戴感受、给白桦的话… 留了言会以弹幕滚动播放；不填则只展示订单。"></textarea>' +
@@ -447,7 +447,7 @@
       hidePanel(sharePanel);
       var p = ensureSharePanel();
       var msgLine = comment ? '· 您的留言将<b>以弹幕</b>滚动播放' : '· 未留言：仅展示订单卡片';
-      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单已提交</div>已即时展示在首页<b>「客户晒单」</b>区<br>' + msgLine + '<br>· 已自动<b>邮件通知品牌方</b>（可在后台弹幕管理库调整显示）<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看客户晒单区</button></div></div>';
+      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单已提交</div>已即时展示在首页<b>「客户晒单」</b>区<br>' + msgLine + '<br>· 联系微信出示本码可享<b>减免 ¥' + shareDiscount + '</b><br>· 已自动<b>邮件通知品牌方</b>（可在后台弹幕管理库调整显示）<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看客户晒单区</button></div></div>';
       showPanel(p);
       toast('✅ 已提交并展示，已邮件通知品牌方');
     } catch (e) {
@@ -476,13 +476,13 @@
     wrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin:2px 0 10px;';
     var d = document.createElement('div');
     d.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-    d.innerHTML = '<button class="b3-btn b3-btn-main" style="flex:1;min-width:150px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3OpenShare()">✅ 晒单授权分享</button>' +
-      '<button class="b3-btn b3-btn-gold" id="b3WheelCta" style="flex:1;min-width:120px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3Wheel()">🎡 幸运转盘减免</button>';
+    d.innerHTML = '<button class="b3-btn b3-btn-main" style="flex:1;min-width:150px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3OpenShare()">✅ 晒单授权 · 留言享减免</button>' +
+      '<button class="b3-btn b3-btn-gold" id="b3WheelCta" style="flex:1;min-width:120px;font-size:13.5px;padding:10px 14px;" onclick="window.__b3Wheel()">🎡 幸运立减抽奖（每码 1 次）</button>';
     wrap.appendChild(d);
     var tip = document.createElement('div');
     tip.className = 'b3-muted';
     tip.style.cssText = 'font-size:11px;color:#6b7a66;';
-    tip.textContent = '同意授权晒单（图片 / 品名 / 设计理念取自订单），提交后即展示在首页「客户晒单」区，并邮件通知品牌方；留言以弹幕播放';
+    tip.textContent = '授权晒单（图片/品名/设计理念取自订单），提交即展示、邮件通知品牌方；留言享减免、并以弹幕播放；转盘每码限 1 次';
     wrap.appendChild(tip);
     var browse = $('browseBtn');
     if (browse && browse.parentNode === rp) rp.insertBefore(wrap, browse);
@@ -781,7 +781,7 @@
       if (!r.error && r.data && r.data.length) { en = r.data[0].wheel_enabled !== false; spun = !!r.data[0].wheel_spun; }
       if (!en) { el.style.display = 'none'; return; }
       if (spun) { el.textContent = '🎡 该码已抽过'; el.disabled = true; el.style.opacity = '.6'; }
-      else { el.textContent = '🎡 幸运转盘减免（限 1 次）'; el.disabled = false; el.style.opacity = '1'; }
+      else { el.textContent = '🎡 幸运立减抽奖（每码 1 次）'; el.disabled = false; el.style.opacity = '1'; }
     }).catch(function () {});
   };
 
@@ -841,7 +841,14 @@
       try { call('showWheelResult', [seg.amount, '该官方码抽奖完成 · 联系微信定制时出示即可使用']); } catch (e) {}
       spinSave(code, seg.amount);
       var s2 = sup();
-      if (s2) { try { s2.rpc('try_claim_wheel', { p_code: code }).catch(function () {}); } catch (e2) {} }
+      if (s2) {
+        try {
+          s2.rpc('try_claim_wheel', { p_code: code }).then(function (rr) {
+            if (rr && rr.error) { if (!dbHint(rr.error, '抽奖锁定')) toast('抽奖状态未同步（请后台执行桦库-完整SQL.sql 第 6 段）'); }
+            else if (rr && rr.data && rr.data[0] && rr.data[0].ok === false) toast('该官方码已抽过奖');
+          }).catch(function () {});
+        } catch (e2) {}
+      }
       try {
         var r2 = $('wheelResult');
         if (r2 && !r2.querySelector('.b3-next-share')) {
