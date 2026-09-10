@@ -1191,17 +1191,18 @@
           var ex = document.getElementById('expCode');
           if (ex && ex.textContent && String(ex.textContent).trim() !== '-' && String(ex.textContent).trim()) code = String(ex.textContent).trim();
         }
-        var url = code ? (SITE.replace(/\/$/, '') + '/?c=' + encodeURIComponent(code)) : (SITE.replace(/\/$/, '') + '?nfc=1');
+        var url = code ? (SITE.replace(/\/$/, '') + '/?nfc=1&c=' + encodeURIComponent(code)) : (SITE.replace(/\/$/, '') + '?nfc=1');
         var ct = get('copyText');
         if (typeof ct === 'function') { try { ct(url); } catch (e) { try { navigator.clipboard.writeText(url); } catch (e2) {} } }
         else { try { navigator.clipboard.writeText(url); } catch (e) {} }
-        toast(code ? '✅ 已复制该客户唯一 NFC/二维码链接（?c=' + code + '）' : '已复制 NFC 互动链接');
+        toast(code ? '✅ 已复制该客户唯一 NFC 链接（?nfc=1&c=' + code + '）' : '已复制 NFC 互动链接');
       };
     }
     /* 打开 ?c=CODE 时自动验证（识别对应客户订单） */
     function autoVerifyFromUrl() {
       try {
         var raw = (location.search || '') + (location.hash || '');
+        if (/[?&#]nfc=1/i.test(raw)) return;   /* NFC 入口不触发查询 */
         var m = raw.match(/(?:[?&#](?:c|code|id|verify|anti)=)([A-Za-z0-9_-]{2,48})/i);
         if (!m) return;
         var code = m[1];
@@ -1218,6 +1219,27 @@
       } catch (e) {}
     }
     try { autoVerifyFromUrl(); } catch (e) {}
+    try {
+      var cards = document.querySelector('.nfc-pop-cards');
+      if (cards && !cards.querySelector('.nfc-share-card')) {
+        var c = document.createElement('div');
+        c.className = 'nfc-pop-card nfc-share-card';
+        c.setAttribute('onclick', 'hideNfcEntry();window.__b3NfcShare()');
+        c.innerHTML = '<span class="nfc-pop-ic">🎁</span><div class="nfc-pop-card-t"><b>晒单享减免</b><small>幸运转盘 · 留言得专属减免</small></div><span class="nfc-pop-arrow">›</span>';
+        cards.appendChild(c);
+      }
+    } catch (e) {}
+    window.__b3NfcShare = function () {
+      var code = '';
+      try {
+        var raw2 = (location.search || '') + (location.hash || '');
+        var m2 = raw2.match(/(?:[?&#](?:c|code|id|verify|anti)=)([A-Za-z0-9_-]{2,48})/i);
+        if (m2) code = m2[1];
+      } catch (e) {}
+      if (!code) { toast('请使用带该订单码的 NFC（链接形如 birchstudio.cn/?nfc=1&c=码）'); return; }
+      closeAll();
+      setTimeout(function () { try { window.__b3OpenCodeWheel(code); } catch (e) { toast('转盘加载失败'); } }, 80);
+    };
     /* 官方码识别归一：纯码 / ?code= 链接 / NFC·QR 里的 birchstudio.cn 网址 → 同一防伪码 */
     try {
       var oExt = window.extractVerifyId;
