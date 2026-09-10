@@ -416,6 +416,12 @@
       } catch (e) {}
     }
     var st = approved ? { approved: true, discount: approved.discount || shareDiscount } : (local ? { approved: false, discount: local.discount || shareDiscount } : null);
+    if (!shareRec) {
+      var pw = ensureSharePanel();
+      pw.innerHTML = head('晒单授权', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status warn"><div class="big">未找到该官方码</div>系统中没有该码对应的订单记录，请确认扫的码 / 链接是否正确。<br><br><div class="b3-row" style="justify-content:center;">' + wechatBtn() + '</div></div></div>';
+      showPanel(pw);
+      return;
+    }
     var p = ensureSharePanel();
     p.innerHTML = head('晒单授权', 'b3SharePanel') + '<div class="b3-body">' + shareModalHTML(shareRec, shareDiscount, st) + '</div>';
     showPanel(p);
@@ -490,9 +496,16 @@
     try { window.__b3SyncWheelCta(id); } catch (e) {}
     ctaInjected = true;
   }
-  window.__b3OpenShare = function () {
-    var id = get('currentVerifyId');
-    if (!id) { toast('请先完成官方验证'); return; }
+  function urlCode() {
+    try {
+      var raw = (location.search || '') + (location.hash || '');
+      var m = raw.match(/(?:[?&#](?:c|code|id|verify|anti)=)([A-Za-z0-9_-]{2,48})/i);
+      return m ? m[1] : '';
+    } catch (e) { return ''; }
+  }
+  window.__b3OpenShare = function (codeArg) {
+    var id = codeArg || get('currentVerifyId') || urlCode() || '';
+    if (!id) { toast('未识别到官方码：请扫该订单的防伪二维码，或用带码的 NFC 链接'); return; }
     renderSharePanel(id);
   };
   window.__b3Wheel = function () {
@@ -856,15 +869,22 @@
           b.className = 'b3-btn b3-btn-main';
           b.style.cssText = 'margin-top:10px;width:100%;';
           b.textContent = '下一步：授权晒单 →';
-          b.onclick = function () { try { call('closeWheel', []); } catch (e) {} window.__b3OpenShare(); };
+          b.onclick = function () { try { call('closeWheel', []); } catch (e) {} window.__b3OpenShare(code); };
           r2.appendChild(b);
         }
       } catch (e3) {}
     }, 3300);
   };
-  window.__b3OpenShare = function () {
-    var id = get('currentVerifyId');
-    if (!id) { toast('请先完成官方验证'); return; }
+  function urlCode() {
+    try {
+      var raw = (location.search || '') + (location.hash || '');
+      var m = raw.match(/(?:[?&#](?:c|code|id|verify|anti)=)([A-Za-z0-9_-]{2,48})/i);
+      return m ? m[1] : '';
+    } catch (e) { return ''; }
+  }
+  window.__b3OpenShare = function (codeArg) {
+    var id = codeArg || get('currentVerifyId') || urlCode() || '';
+    if (!id) { toast('未识别到官方码：请扫该订单的防伪二维码，或用带码的 NFC 链接'); return; }
     renderSharePanel(id);
   };
 
@@ -1229,16 +1249,25 @@
         cards.appendChild(c);
       }
     } catch (e) {}
-    window.__b3NfcShare = function () {
-      var code = '';
-      try {
-        var raw2 = (location.search || '') + (location.hash || '');
-        var m2 = raw2.match(/(?:[?&#](?:c|code|id|verify|anti)=)([A-Za-z0-9_-]{2,48})/i);
-        if (m2) code = m2[1];
-      } catch (e) {}
+    window.__b3NfcShare = async function () {
+      var code = urlCode();
       if (!code) { toast('请使用带该订单码的 NFC（链接形如 birchstudio.cn/?nfc=1&c=码）'); return; }
       closeAll();
-      setTimeout(function () { try { window.__b3OpenCodeWheel(code); } catch (e) { toast('转盘加载失败'); } }, 80);
+      var canSpin = true;
+      var sb = sup();
+      if (sb) {
+        try {
+          var r = await sb.from('records').select('wheel_enabled,wheel_spun').eq('id', String(code)).limit(1);
+          if (!r.error && r.data && r.data.length) {
+            var rec = r.data[0];
+            canSpin = (rec.wheel_enabled !== false) && !rec.wheel_spun;
+          }
+        } catch (e) {}
+      }
+      setTimeout(function () {
+        if (canSpin) { try { window.__b3OpenCodeWheel(code); } catch (e) { window.__b3OpenShare(code); } }
+        else { toast('该码不可抽奖 · 直接晒单留言'); window.__b3OpenShare(code); }
+      }, 80);
     };
     /* 官方码识别归一：纯码 / ?code= 链接 / NFC·QR 里的 birchstudio.cn 网址 → 同一防伪码 */
     try {
