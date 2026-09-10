@@ -1175,6 +1175,49 @@
     try { watchVerifyResult(); } catch (e) {}
     try { cleanBuy(); } catch (e) {}
     try { hookAi(); } catch (e) {}
+    /* NFC/二维码：复制的是「每码唯一」链接（?c=<官方码>），扫码/打开后自动验证到对应客户 */
+    var __b3CopyNfcDone = false;
+    if (!__b3CopyNfcDone) {
+      __b3CopyNfcDone = true;
+      var SITE = get('SITE_URL') || (location.origin || 'https://birchstudio.cn');
+      window.copyNfcCode = function () {
+        var code = '';
+        try {
+          var el = document.activeElement;
+          var row = el && el.closest ? el.closest('.db-record') : null;
+          if (row && row.getAttribute('data-id')) code = row.getAttribute('data-id');
+        } catch (e) {}
+        if (!code) {
+          var ex = document.getElementById('expCode');
+          if (ex && ex.textContent && String(ex.textContent).trim() !== '-' && String(ex.textContent).trim()) code = String(ex.textContent).trim();
+        }
+        var url = code ? (SITE.replace(/\/$/, '') + '/?c=' + encodeURIComponent(code)) : (SITE.replace(/\/$/, '') + '?nfc=1');
+        var ct = get('copyText');
+        if (typeof ct === 'function') { try { ct(url); } catch (e) { try { navigator.clipboard.writeText(url); } catch (e2) {} } }
+        else { try { navigator.clipboard.writeText(url); } catch (e) {} }
+        toast(code ? '✅ 已复制该客户唯一 NFC/二维码链接（?c=' + code + '）' : '已复制 NFC 互动链接');
+      };
+    }
+    /* 打开 ?c=CODE 时自动验证（识别对应客户订单） */
+    function autoVerifyFromUrl() {
+      try {
+        var raw = (location.search || '') + (location.hash || '');
+        var m = raw.match(/(?:[?&#](?:c|code|id|verify|anti)=)([A-Za-z0-9_-]{2,48})/i);
+        if (!m) return;
+        var code = m[1];
+        var tries = 0;
+        var t = setInterval(function () {
+          tries++;
+          if (typeof window.submitVerify === 'function') {
+            clearInterval(t);
+            var inp = document.getElementById('inputId');
+            if (inp) inp.value = code;
+            try { window.submitVerify(); } catch (e) {}
+          } else if (tries > 40) clearInterval(t);
+        }, 250);
+      } catch (e) {}
+    }
+    try { autoVerifyFromUrl(); } catch (e) {}
     /* 官方码识别归一：纯码 / ?code= 链接 / NFC·QR 里的 birchstudio.cn 网址 → 同一防伪码 */
     try {
       var oExt = window.extractVerifyId;
