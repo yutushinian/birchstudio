@@ -29,14 +29,14 @@
       var link = document.createElement('link');
       link.id = 'birch3css';
       link.rel = 'stylesheet';
-      link.href = 'js/birch3.css?v=20260909l';
+      link.href = 'js/birch3.css?v=20260909m';
       document.head.appendChild(link);
     } catch (e) {}
     try {
       if (document.getElementById('birch3js')) return;
       var s = document.createElement('script');
       s.id = 'birch3js';
-      s.src = 'js/birch3.js?v=20260909l';
+      s.src = 'js/birch3.js?v=20260909m';
       s.onerror = function () { if (window.console) console.warn('birch3.js 加载失败（网络/CDN 缓存），请稍后刷新'); };
       document.body.appendChild(s);
     } catch (e) {}
