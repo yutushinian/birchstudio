@@ -140,10 +140,14 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           kind: 'share',
-          subject: subject || '【白桦】新授权晒单（弹幕库）',
+          subject: subject || ('【白桦】新授权晒单 · ' + (row.name || '白桦定制')),
           fields: {
-            官方码: row.code || '', 品名: row.name || '', 专属编号: row.batch || '',
-            留言: row.comment || '（未留言）', 提交时间: new Date().toLocaleString('zh-CN')
+            产品: row.name || '（未知）',
+            产品图片: row.img ? String(row.img) : '（无）',
+            官方码: row.code || '', 专属编号: row.batch || '',
+            抽奖立减: row.spinAmt ? ('¥' + row.spinAmt) : '未抽奖',
+            留言: row.comment || '（未留言）',
+            提交时间: new Date().toLocaleString('zh-CN')
           }
         })
       }).catch(function () {});
@@ -438,22 +442,25 @@
     var btn = $('b3SubmitShare');
     if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
     try {
+      var spinRec = null;
+      try { spinRec = spinRead(code); } catch (e) {}
+      var spinAmt = spinRec && spinRec.amt ? Number(spinRec.amt) : 0;
       var row = {
         code: String(code), name: shareRec ? (shareRec.product_name || '') : '',
         batch: shareRec ? (shareRec.batch_no || '') : '', idea: '',
-        img: img, comment: comment, discount: shareDiscount,
+        img: img, comment: comment, discount: spinAmt || shareDiscount,
         contact: '', consent: true, approved: true
       };
       var r = await sb.from('shares').insert([row]);
       if (r.error) throw r.error;
       var map = localMap();
-      map[String(code)] = { approved: true, discount: shareDiscount, ts: Date.now() };
+      map[String(code)] = { approved: true, discount: spinAmt || shareDiscount, ts: Date.now() };
       localSave(map);
-      sendShareMail(row);
+      sendShareMail(Object.assign({}, row, { spinAmt: spinAmt }));
       hidePanel(sharePanel);
       var p = ensureSharePanel();
       var msgLine = comment ? '· 您的留言将<b>以弹幕</b>滚动播放' : '· 未留言：仅展示订单卡片';
-      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">📨 晒单已提交</div>已即时展示在首页<b>「客户晒单」</b>区<br>' + msgLine + '<br>· 联系微信出示本码可享<b>减免 ¥' + shareDiscount + '</b><br>· 已自动<b>邮件通知品牌方</b>（可在后台弹幕管理库调整显示）<br><br>' + wechatBtn() + '</div><div class="b3-row" style="justify-content:center;margin-top:10px;"><button class="b3-btn b3-btn-soft" style="width:auto;" onclick="window.__b3GoShares()">⬆️ 查看客户晒单区</button></div></div>';
+      p.innerHTML = head('提交成功 🎉', 'b3SharePanel') + '<div class="b3-body"><div class="b3-status ok"><div class="big">✅ 已提交</div>请联系品牌方<br><br>' + wechatBtn() + '</div></div>';
       showPanel(p);
       toast('✅ 已提交并展示，已邮件通知品牌方');
     } catch (e) {
