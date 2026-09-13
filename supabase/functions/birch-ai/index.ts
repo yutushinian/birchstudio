@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
         "  1) 每种石一行：「石:海蓝宝|数量:7|色:#7FB5C9」，写 3-5 种，" + count + " 颗之和必须正好等于 " + count + "；",
         "  2) 再另起一行输出完整串序（顺时针逐颗排列）：「石序:海蓝宝,海蓝宝,月光石,海蓝宝,…」，必须逐颗列出、正好 " + count + " 个名字，且与上面的数量完全一致；",
         "第二部分·设计理念：以「串为……」开篇，结合季节调候与本命喜忌，逐石点题（与配比一致），交代缀饰与整体意象，150-220 字；",
-        "第三部分·诗曰：四句七言，每句一行，最后输出。",
+        "第三部分·诗曰：必须另起一行，以「诗曰：」开头，随后四行，每行一句七言（共四句），不要写成段落。",
         "用户信息：" + userInfo
       ].join(NL);
 
@@ -187,36 +187,47 @@ Deno.serve(async (req) => {
       if (seq.length > count) seq = seq.slice(0, count);
       while (seq.length < count && stones.length) seq.push(stones[seq.length % stones.length].name);
 
-      // 设计理念：截取「设计理念」段（去掉配比/串序行）
+      // ---- 诗曰（优先按“诗曰”标记；失败取末尾四行短句兜底） ----
+      let poem = "";
+      let poemAt = rawTxt.search(/诗\s*[曰：:]/);
+      if (poemAt > -1) {
+        const poemRaw = rawTxt.slice(poemAt).replace(/^[^\n]*?诗\s*[曰：:]\s*/, "");
+        const pl = poemRaw.split(NL).map(function (t) { return t.replace(/^\s*(?:\d+[.)、]\s*)/, "").trim(); }).filter(Boolean).slice(0, 4);
+        if (pl.length >= 2) poem = pl.join(NL);
+      }
+      if (!poem) {
+        const cand = lines
+          .filter(function (ln) {
+            const t = ln.replace(/^\s*(?:\d+[.)、]\s*)/, "").trim();
+            return t && !/石[:：]|石序|数量[:：]|色[:：]|设计理念/.test(t);
+          })
+          .map(function (ln) { return ln.replace(/^\s*(?:\d+[.)、]\s*)/, "").trim(); });
+        const tail4 = cand.slice(-4);
+        if (tail4.length === 4 && tail4.every(function (t) { return t.length >= 5 && t.length <= 12; })) {
+          poem = tail4.join(NL);
+          poemAt = rawTxt.lastIndexOf(tail4[0]);
+        }
+      }
+
+      // ---- 设计理念：配比之后、诗曰之前 ----
       let analysis = "";
       const di = rawTxt.lastIndexOf("设计理念");
       const si = rawTxt.lastIndexOf("串为");
       let from = -1;
       if (di > -1) from = di; else if (si > -1) from = si;
+      const endAt = (poem && from > -1 && poemAt > from) ? poemAt : -1;
       if (from > -1) {
-        let tail = rawTxt.slice(from).replace(/^设计理念[:：]?\s*/, "");
-        const pi = tail.search(/诗[曰：:]/);
-        if (pi > -1) tail = tail.slice(0, pi);
-        analysis = tail.trim();
+        analysis = rawTxt.slice(from, endAt > -1 ? endAt : rawTxt.length).replace(/^设计理念[:：]?\s*/, "").trim();
       }
+      analysis = analysis.split(NL).filter(function (ln) {
+        return !/石[:：]|石序|数量[:：]|色[:：]/.test(ln);
+      }).join(NL).trim();
       if (!analysis) {
         analysis = lines.filter(function (ln) {
-          return !/石[:：]|石序|数量[:：]|色[:：]/.test(ln) && !/诗[曰：:]/.test(ln) && ln.trim();
+          return !/石[:：]|石序|数量[:：]|色[:：]|诗[曰：:]/.test(ln) && ln.trim();
         }).join(NL).trim();
       }
       if (!analysis) analysis = "白桦定制：依五行与季节意象取平衡搭配（详见最终设计）";
-
-      // 诗曰（四句）
-      let poem = "";
-      const pIdx = lines.findIndex(function (ln) { return /^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/.test(ln); });
-      if (pIdx > -1) {
-        const got = [];
-        for (let i = pIdx; i < lines.length && got.length < 4; i++) {
-          const ln = lines[i].replace(/^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/, "").trim();
-          if (ln) got.push(ln);
-        }
-        poem = got.join(NL);
-      }
 
       // ---- 通义（硅基流动 Z-Image）严格按串序出图 ----
       const imgKey2 = dbAi2.img_key || Deno.env.get("SILICON_KEY") || "";
