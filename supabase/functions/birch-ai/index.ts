@@ -112,33 +112,39 @@ Deno.serve(async (req) => {
     }
 
     if (mode === "design") {
-      // 五模式统一：输入汇总 → DeepSeek v4-flash 文学分析（含逐石配比+配色+诗）→ 通义按配比生图
+      // 输入 → DeepSeek v4-flash（严格颗数规则 + 配比/串序 + 设计理念 + 诗曰）→ 通义按串序出图
       const d = body.design || {};
-      const mm = Number(d.mm) || 10;
-      const count = mm >= 10 ? 18 : 22;
+      const mm = Number(d.mm || body.mm) || 10;
+      const count = mm >= 10 ? 18 : 22;   // 硬性：10mm=18颗，8mm=22颗
       const kind = body.kind || "bazi";
       const info = body.info || "";
       let userInfo = "";
-      if (kind === "bazi") userInfo = "生辰：出生" + (info.year || "?") + "年" + (info.month || "?") + "月" + (info.day || "?") + "日" + (info.hour || "?") + "时，生肖" + (info.zod || "?") + "，本命五行" + (info.el || "?") + (info.gua ? "，另取卦「" + info.gua + "」" : "");
+      if (kind === "bazi") userInfo = "生辰：出生" + (info.year || "?") + "年" + (info.month || "?") + "月" + (info.day || "?") + "日" + (info.hour || "?") + "时，生肖" + (info.zod || "?") + "，本命五行" + (info.el || "?") + (info.gua ? "，另取卦「" + info.gua + "」" : "") + (info.ganzhi ? "，四柱：" + info.ganzhi : "") + (info.dayMaster ? "，日主" + info.dayMaster : "") + (info.wuxing ? "，五行分布：" + info.wuxing : "");
       else if (kind === "hex") userInfo = "摇卦得「" + (info.name || "") + "（" + (info.sym || "") + "）」，" + (info.idea || "") + "，五行属" + (info.wu || "");
       else if (kind === "zod") userInfo = "本命生肖：" + (info.zod || "") + "，五行" + (info.el || "");
       else if (kind === "star") userInfo = "太阳星座：" + (info.sun || "") + (info.moon ? "，月亮：" + info.moon : "") + (info.rising ? "，上升：" + info.rising : "");
       else if (kind === "union") userInfo = "合盘：我的星座 " + (info.a || "") + "，对方星座 " + (info.b || "") + (info.note ? "；备注：" + info.note : "");
       else if (kind === "free") userInfo = "用户选择「随缘搭配」，无生辰信息：" + (info.note ? "（" + info.note + "）" : "请自由发挥，给出 3-5 种晶石的整套搭配设计与意象。");
-      const beadLine = "成串规格：整串统一 " + mm + "mm 同径圆珠，共 " + count + " 颗（用户已选定，勿改）";
+
       const dbAi2 = await getDbAi(SB_URL, SK) || {};
       const dk2 = Deno.env.get("AI_API_KEY") || dbAi2.key || "";
       const dmodel2 = Deno.env.get("AI_MODEL") || dbAi2.model || "deepseek-chat";
       if (!dk2) return Response.json({ ok: false, error: "后台 AI 密钥未配置（settings.ai）" }, { headers: corsHeaders });
+
+      const NL = String.fromCharCode(10);
       const sysP2 = [
-        "你是白桦的设计师与文案：根据用户信息，为一串水晶手串做完整定制方案（同径整串，" + beadLine + "）。",
-        "不要使用任何 * 星号与 markdown 标记。",
-        "请严格按以下格式输出（每行一个条目），只输出最终答案本身，不要思考过程、不要解释、不要复述用户信息：",
-        "1) 逐石配比：每行「石:海蓝宝|数量:1|色:#7FB5C9」列出 3-5 种晶石与其颗数与代表色（颗数之和须等于 " + count + "，体现主次搭配与调候/五行的平衡）；",
-        "2) 设计理念：以「串为……量身定制」开篇，谈季节调候与五行喜忌，逐石点题（与上面石料一致），缀饰与整体意象，共约150-220字；",
-        "3) 诗曰：四句七言收尾。",
+        "你是白桦的设计师与文案。根据用户信息，为这位客户设计一串最适合他的水晶手串。",
+        "【硬性规格】整串同径圆珠，全部珠子直径一致。10mm 整串必须正好 18 颗；8mm 整串必须正好 22 颗。",
+        "本次规格：整串统一 " + mm + "mm 同径圆珠，必须正好 " + count + " 颗（不得多一颗、少一颗，不得混径）。",
+        "不要使用任何 * 星号与 markdown 标记，不要复述用户信息，不要思考过程，只输出下面三部分：",
+        "第一部分·配比（仅用于后台出图，客户看不到）：",
+        "  1) 每种石一行：「石:海蓝宝|数量:7|色:#7FB5C9」，写 3-5 种，" + count + " 颗之和必须正好等于 " + count + "；",
+        "  2) 再另起一行输出完整串序（顺时针逐颗排列）：「石序:海蓝宝,海蓝宝,月光石,海蓝宝,…」，必须逐颗列出、正好 " + count + " 个名字，且与上面的数量完全一致；",
+        "第二部分·设计理念：以「串为……」开篇，结合季节调候与本命喜忌，逐石点题（与配比一致），交代缀饰与整体意象，150-220 字；",
+        "第三部分·诗曰：四句七言，每句一行，最后输出。",
         "用户信息：" + userInfo
-      ].join(String.fromCharCode(10));
+      ].join(NL);
+
       const pa2 = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + dk2 },
         body: JSON.stringify({ model: dmodel2, messages: [{ role: "system", content: sysP2 }], temperature: 0.7, max_tokens: 3200, thinking: { type: "disabled" } })
@@ -146,38 +152,82 @@ Deno.serve(async (req) => {
       const rawTxt = pa2 && pa2.choices && pa2.choices[0] && pa2.choices[0].message
         ? String((pa2.choices[0].message.content || pa2.choices[0].message.reasoning_content) || "").split("*").join("").trim()
         : "";
-      // 取“最终成文”：优先最后一个『设计理念』段；否则取最后石行之后
-      var analysis = rawTxt;
-      var stones = [];
-      {
-        var NLf2 = String.fromCharCode(10);
-        var from = -1;
-        var di = String(rawTxt).lastIndexOf(NLf2 + '设计理念');
-        var si2 = String(rawTxt).lastIndexOf(NLf2 + '串为');
-        var pi = String(rawTxt).lastIndexOf(NLf2 + '诗曰');
-        if (di > -1) from = di;
-        else if (si2 > -1) from = si2;
-        else if (pi > -1) { var t0 = String(rawTxt).indexOf(NLf2 + '石:'); if (t0 > -1) from = t0; }
-        if (from > -1) analysis = String(rawTxt).slice(from + 1).replace(/^\s*/, '');
-      }
-      const lines = String(rawTxt).split(String.fromCharCode(10))
+
+      // ---- 解析：配比 / 串序 / 设计理念 / 诗曰 ----
+      const lines = String(rawTxt).split(NL);
+      let stones = [];
       lines.forEach(function (ln) {
-        ln = ln.trim();
-        let m = /石[:：]\s*([^|]+?)\s*\|\s*数量[:：]\s*(\d+)\s*\|\s*色[:：]\s*(#[0-9a-fA-F]{3,6})/.exec(ln);
-        if (!m) m = /([\u4e00-\u9fa5]{2,6})(?:珠|石)?\s*[×x*]\s*(\d+)/.exec(ln);
-        if (!m) m = /([\u4e00-\u9fa5]{2,6})\s*(\d+)\s*颗/.exec(ln);
-        if (m) stones.push({ name: m[1].trim(), count: Number(m[2]), color: m[3] });
+        const t = ln.trim();
+        let m = /石[:：]\s*([^|]+?)\s*\|\s*数量[:：]\s*(\d+)\s*\|\s*色[:：]\s*(#[0-9a-fA-F]{3,6})/.exec(t);
+        if (!m) m = /石[:：]\s*([^|]+?)\s*\|\s*数量[:：]\s*(\d+)/.exec(t);
+        if (m && !/石序/.test(t)) stones.push({ name: m[1].trim(), count: Number(m[2]), color: m[3] || "" });
       });
+      let seq = [];
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const t = lines[i].trim();
+        const m = /石序[:：]\s*(.+)$/.exec(t);
+        if (m) {
+          seq = m[1].split(/[,，、\s]+/).map(function (x) { return x.replace(/[0-9]+$/, "").trim(); }).filter(Boolean);
+          break;
+        }
+      }
+      if (!stones.length) {
+        if (seq.length) {
+          const tally = {};
+          seq.forEach(function (n) { tally[n] = (tally[n] || 0) + 1; });
+          stones = Object.keys(tally).map(function (n) { return { name: n, count: tally[n], color: "" }; });
+        } else {
+          stones = [{ name: "天然水晶", count: count, color: String(d.color || "#e3c47c") }];
+        }
+      }
+      // 串序校正：不足则按配比补齐，超出则截断，保证正好 count 颗
+      if (!seq.length) {
+        stones.forEach(function (st) { for (let k = 0; k < st.count; k++) seq.push(st.name); });
+      }
+      if (seq.length > count) seq = seq.slice(0, count);
+      while (seq.length < count && stones.length) seq.push(stones[seq.length % stones.length].name);
+
+      // 设计理念：截取「设计理念」段（去掉配比/串序行）
+      let analysis = "";
+      const di = rawTxt.lastIndexOf("设计理念");
+      const si = rawTxt.lastIndexOf("串为");
+      let from = -1;
+      if (di > -1) from = di; else if (si > -1) from = si;
+      if (from > -1) {
+        let tail = rawTxt.slice(from).replace(/^设计理念[:：]?\s*/, "");
+        const pi = tail.search(/诗[曰：:]/);
+        if (pi > -1) tail = tail.slice(0, pi);
+        analysis = tail.trim();
+      }
+      if (!analysis) {
+        analysis = lines.filter(function (ln) {
+          return !/石[:：]|石序|数量[:：]|色[:：]/.test(ln) && !/诗[曰：:]/.test(ln) && ln.trim();
+        }).join(NL).trim();
+      }
       if (!analysis) analysis = "白桦定制：依五行与季节意象取平衡搭配（详见最终设计）";
-      if (!stones.length) stones = [{ name: "天然水晶", count: count, color: String(d.color || "#e3c47c") }];
-      // 通义（硅基流动 Z-Image）按逐石配比生图
+
+      // 诗曰（四句）
+      let poem = "";
+      const pIdx = lines.findIndex(function (ln) { return /^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/.test(ln); });
+      if (pIdx > -1) {
+        const got = [];
+        for (let i = pIdx; i < lines.length && got.length < 4; i++) {
+          const ln = lines[i].replace(/^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/, "").trim();
+          if (ln) got.push(ln);
+        }
+        poem = got.join(NL);
+      }
+
+      // ---- 通义（硅基流动 Z-Image）严格按串序出图 ----
       const imgKey2 = dbAi2.img_key || Deno.env.get("SILICON_KEY") || "";
       const imgBase2 = dbAi2.img_base || "https://api.siliconflow.cn/v1";
       const imgModel2 = dbAi2.img_model || "Tongyi-MAI/Z-Image-Turbo";
       let url = "";
       if (imgKey2) {
-        const orderDesc = stones.map(function (s) { return s.name + " x" + s.count + " (" + s.color + ")"; }).join(", ");
-        const promptTxt2 = "High-end luxury jewelry brand editorial product photograph of a " + mm + "mm " + count + "-bead real polished crystal bracelet, beads in sequence per design: " + orderDesc + ", photoreal AA-grade crystals with natural inner texture and soft sparkle, elegant neat ring on deep navy-to-black gradient studio background, soft golden rim light, crisp macro focus, against a premium deep space backdrop in the house style: deep navy-to-black gradient with a soft golden vignette and faint stardust glow around the beads, elegant high-end jewelry campaign lighting, crisp macro focus, refined luxury mood, no text, no watermark, 4k.";
+        const colorOf = {};
+        stones.forEach(function (st) { if (st.color) colorOf[st.name] = st.color; });
+        const seqDesc = seq.map(function (n) { return n + (colorOf[n] ? "(" + colorOf[n] + ")" : ""); }).join(" -> ");
+        const promptTxt2 = "High-end luxury jewelry brand editorial product photograph of a real polished crystal bead bracelet with EXACTLY " + count + " round beads, every bead EXACTLY " + mm + "mm in diameter, all beads the same size, forming one neat closed ring. Beads arranged strictly in this clockwise order from the top: " + seqDesc + ". Photoreal AA-grade natural crystals with inner texture and soft sparkle (not illustration), elegant high-end jewelry campaign lighting, deep navy-to-black gradient studio background with soft golden rim light, crisp macro focus, no text, no watermark, 4k.";
         const ir2 = await fetch(imgBase2.replace(/\/$/, "") + "/images/generations", {
           method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + imgKey2 },
           body: JSON.stringify({ model: imgModel2, prompt: promptTxt2, image_size: "1024x1024", num_images: 1 })
@@ -200,8 +250,10 @@ Deno.serve(async (req) => {
         }
       }
       await recordUsage(SB_URL, SK, 'design', (info.zod || info.sun || info.name || "design"));
-      return Response.json({ ok: true, analysis: analysis, stones: stones, url: url, mm: mm, count: count }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      // 返回：分析=设计理念，poem=诗曰；配比/串序(stones/seq)仅供后台与出图用
+      return Response.json({ ok: true, analysis: analysis, poem: poem, stones: stones, seq: seq, url: url, mm: mm, count: count }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
     if (mode === "product_img") {
       const d = body.design || {};
       const bz = body.bazi || null;
@@ -297,9 +349,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-
-// deploy-trigger 1788877044
-
-// deploy-trigger-2 1788877775
-
-// reconnect-trigger 1788886875
