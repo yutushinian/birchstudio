@@ -228,7 +228,7 @@
     var sb = sup();
     if (!sb) return { rows: [], recMap: {} };
     try {
-      var r = await sb.from('shares').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(50);
+      var r = await sb.from('shares').select('*').order('created_at', { ascending: false }).limit(60);
       if (r.error) throw r.error;
       var rows = r.data || [];
       var recMap = {};
@@ -270,9 +270,9 @@
   function renderShareSection(rows, recMap) {
     var grid = $('b3ShareGrid');
     if (!grid) return;
-    var approved = (rows || []).filter(function (s) { return s.approved === true; });
-    var cardRows = approved.filter(function (s) { return s.code && String(s.code).trim() !== ''; });
-    dmQueue = approved.filter(function (s) { return s.comment && String(s.comment).trim().length > 1; })
+    var visible = (rows || []).filter(function (s) { return s.card_on !== false || s.dm_on !== false; });
+    var cardRows = visible.filter(function (s) { return s.card_on !== false && s.code && String(s.code).trim() !== ''; });
+    dmQueue = visible.filter(function (s) { return s.dm_on !== false && s.comment && String(s.comment).trim().length > 1; })
       .map(function (s) { return { name: (s.name || '白桦精选').slice(0, 12), txt: bulletText(s.comment), extra: '' }; });
     var line = $('b3DmLine');
     if (line) line.style.display = dmQueue.length ? 'block' : 'none';
@@ -415,7 +415,7 @@
     var approved = null;
     if (sb && local) {
       try {
-        var q = await sb.from('shares').select('id,discount,comment,approved').eq('code', String(code)).eq('approved', true).limit(1);
+        var q = await sb.from('shares').select('id,discount,comment,approved,card_on,dm_on').eq('code', String(code)).limit(1);
         if (!q.error && q.data && q.data.length) approved = q.data[0];
       } catch (e) {}
     }
@@ -565,7 +565,7 @@
         '<button class="b3-tab" onclick="window.__b3RefreshShares()">↻ 刷新</button></div>' +
         '<div class="b3-admin-tabs">' +
         '<button class="b3-tab on" data-t="approved" onclick="window.__b3SecTab(\'approved\')">✅ 显示中</button>' +
-        '<button class="b3-tab" data-t="pending" onclick="window.__b3SecTab(\'pending\')">🙈 已隐藏</button>' +
+        '<button class="b3-tab" data-t="pending" onclick="window.__b3SecTab(\'pending\')">🚫 整条隐藏</button>' +
         '<button class="b3-tab" data-t="all" onclick="window.__b3SecTab(\'all\')">全部</button></div>' +
         '<div style="display:flex;gap:6px;align-items:center;margin:8px 0 10px;flex-wrap:wrap;background:rgba(255,255,255,.7);border:1px solid rgba(74,124,89,.3);border-radius:12px;padding:8px;">' +
         '<span style="font-size:12.5px;color:#2f5c40;font-weight:700;">＋ 手动新增弹幕</span>' +
@@ -611,16 +611,24 @@
   function adminRow(s) {
     var img = firstImg(s.img);
     var media = img ? (isVideo(img) ? '<video class="b3-card-img" src="' + esc(img) + '" muted playsinline></video>' : '<img class="b3-card-img" src="' + esc(img) + '" loading="lazy" onerror="this.style.display=\'none\'">') : '<div class="b3-card-img-ph" style="width:58px;height:58px;flex:0 0 58px;font-size:20px;">💎</div>';
-    var st = s.approved ? '<span style="color:#4a7c59;font-weight:700;">✅ 显示中</span>' : '<span style="color:#d4a03d;font-weight:700;">🙈 已隐藏</span>';
+    var cardOn = s.card_on !== false, dmOn = s.dm_on !== false;
+    function chip(on, label) {
+      return '<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;margin:0 6px 0 0;' +
+        (on ? 'background:#e9f5ec;color:#2f5c40;border:1px solid #4a7c59;' : 'background:#f6efe0;color:#8a6d3b;border:1px solid #c9a96e;') +
+        '">' + label + (on ? ' 显示中' : ' 已隐藏') + '</span>';
+    }
     return '<div class="b3-arow" data-id="' + s.id + '">' + media +
-      '<div class="b3-arow-info"><div class="t">' + esc(s.name || '白桦定制') + '　' + st + '</div>' +
+      '<div class="b3-arow-info"><div class="t">' + esc(s.name || '白桦定制') + '</div>' +
+      '<div style="margin:5px 0 3px;">' + chip(cardOn, '🖼 信息') + chip(dmOn, '💬 弹幕') + '</div>' +
       '<div class="c">码 ' + esc(s.code || '') + (s.batch ? ' · ' + esc(s.batch) : '') + ' · ' + fmtTime(s.created_at) + (s.consent ? ' · 已授权' : ' · ⚠️未授权') + '</div>' +
       (s.comment ? '<div class="m">💬 ' + esc(s.comment) + '</div>' : '') +
       (s.idea ? '<div class="m" style="background:#f2f4ef;">✨ ' + esc(s.idea) + '</div>' : '') +
       '<div class="b3-arow-ops">' +
-      (s.approved
-        ? '<button class="b3-mini off" onclick="window.__b3SetShare(' + s.id + ',false)">🙈 隐藏</button>'
-        : '<button class="b3-mini ok" onclick="window.__b3SetShare(' + s.id + ',true)">✅ 显示</button>') +
+      '<button class="b3-mini ' + (cardOn ? 'off' : 'ok') + '" onclick="window.__b3SetCard(' + s.id + ',' + (cardOn ? 'false' : 'true') + ')">' + (cardOn ? '🖼 隐藏信息' : '🖼 显示信息') + '</button>' +
+      '<button class="b3-mini ' + (dmOn ? 'off' : 'ok') + '" onclick="window.__b3SetDm(' + s.id + ',' + (dmOn ? 'false' : 'true') + ')">' + (dmOn ? '💬 停弹幕' : '💬 播弹幕') + '</button>' +
+      ((cardOn || dmOn)
+        ? '<button class="b3-mini off" onclick="window.__b3SetAll(' + s.id + ',false)">🚫 整条隐藏</button>'
+        : '<button class="b3-mini ok" onclick="window.__b3SetAll(' + s.id + ',true)">✅ 整条显示</button>') +
       '<button class="b3-mini del" onclick="window.__b3DelShare(' + s.id + ')">🗑 删除</button>' +
       '</div></div></div>';
   }
@@ -632,15 +640,18 @@
     if (rows === null) { listEl.innerHTML = '<div class="b3-empty">读取失败：请确认已用管理员账号进入后台（管理员密码在左侧顶栏登录）。</div>'; return; }
     var all = rows;
     window.__b3AdminRows = all;
-    var filtered = secTab === 'all' ? all : all.filter(function (s) { return secTab === 'approved' ? s.approved : !s.approved; });
+    var isOn = function (s) { return s.card_on !== false || s.dm_on !== false; };
+    var filtered = secTab === 'all' ? all : all.filter(function (s) { return secTab === 'approved' ? isOn(s) : !isOn(s); });
     var st = $('b3SecStats');
     if (st) {
       var on = all.filter(function (s) { return s.approved; }).length;
       var off = all.length - on;
-      st.textContent = '共 ' + all.length + ' 条 · 显示中 ' + on + ' · 已隐藏 ' + off;
+      var cOn = all.filter(function (s) { return s.card_on !== false; }).length;
+      var dOn = all.filter(function (s) { return s.dm_on !== false && s.comment; }).length;
+      st.textContent = '共 ' + all.length + ' 条 · 信息 ' + cOn + ' · 弹幕 ' + dOn + ' · 整条隐藏 ' + (all.length - on);
     }
     if (!filtered.length) {
-      listEl.innerHTML = '<div class="b3-empty">' + (secTab === 'pending' ? '🙈 暂无已隐藏条目' : (secTab === 'approved' ? '✅ 暂无显示中的晒单' : '暂无记录')) + '<br>客户晒单提交后自动进入此库（已发邮件通知）。</div>';
+      listEl.innerHTML = '<div class="b3-empty">' + (secTab === 'pending' ? '🚫 暂无整条隐藏的条目' : (secTab === 'approved' ? '✅ 暂无显示中的晒单' : '暂无记录')) + '<br>客户晒单提交后自动进入此库（已发邮件通知）。</div>';
       return;
     }
     listEl.innerHTML = filtered.map(adminRow).join('');
@@ -680,7 +691,7 @@
     try {
       var r = await sb.from('shares').insert([{
         code: '', name: nm, batch: '', idea: '', img: '', comment: txt,
-        consent: true, approved: true
+        consent: true, approved: true, card_on: false, dm_on: true
       }]);
       if (r.error) throw r.error;
       toast('✅ 已新增弹幕并展示');
@@ -690,6 +701,36 @@
     } catch (e) {
       if (!dbHint(e, '新增')) toast('新增失败：' + ((e && e.message) || e));
     }
+  };
+  window.__b3SetCard = async function (id, on) {
+    var pwd = adminPwd();
+    if (!pwd) { toast('请先登录管理员账号'); return; }
+    var sb = sup();
+    if (!sb) return;
+    var r = await sb.rpc('set_share_card', { p_id: id, p_on: on, p_pwd: pwd });
+    if (r.error || r.data === false) { if (!dbHint(r.error, '设置')) toast('操作失败：' + ((r.error && r.error.message) || '校验未通过')); return; }
+    toast(on ? '🖼 已显示该条信息（订单卡片）' : '🖼 已隐藏该条信息（弹幕不受影响）');
+    refreshShares(); renderSharesAdmin();
+  };
+  window.__b3SetDm = async function (id, on) {
+    var pwd = adminPwd();
+    if (!pwd) { toast('请先登录管理员账号'); return; }
+    var sb = sup();
+    if (!sb) return;
+    var r = await sb.rpc('set_share_dm', { p_id: id, p_on: on, p_pwd: pwd });
+    if (r.error || r.data === false) { if (!dbHint(r.error, '设置')) toast('操作失败：' + ((r.error && r.error.message) || '校验未通过')); return; }
+    toast(on ? '💬 已开始播放该条弹幕' : '💬 已停止该条弹幕（信息仍在）');
+    refreshShares(); renderSharesAdmin();
+  };
+  window.__b3SetAll = async function (id, on) {
+    var pwd = adminPwd();
+    if (!pwd) { toast('请先登录管理员账号'); return; }
+    var sb = sup();
+    if (!sb) return;
+    var r = await sb.rpc('set_share_all', { p_id: id, p_on: on, p_pwd: pwd });
+    if (r.error || r.data === false) { if (!dbHint(r.error, '设置')) toast('操作失败：' + ((r.error && r.error.message) || '校验未通过')); return; }
+    toast(on ? '✅ 整条已显示（信息 + 弹幕）' : '🚫 整条已隐藏（前台完全看不到）');
+    refreshShares(); renderSharesAdmin();
   };
   window.__b3DelShare = async function (id) {
     if (!window.confirm('确定删除该条弹幕/晒单吗？删除后首页卡片与弹幕同步移除，不可恢复。')) return;
