@@ -168,7 +168,7 @@
       '</div>' +
       '<a class="b3-shares-cta" href="javascript:void 0" onclick="window.__b3GoVerify()">持有官方码？晒单展示 →</a>' +
       '</header>' +
-      '<div class="b3-dm-line" id="b3DmLine" style="display:none;"><span class="b3-dm-hint">💬 客户留言弹幕</span><div class="b3-dm-layer" id="b3DmLayerI"></div></div>' +
+      '<div class="b3-dm-line" id="b3DmLine" style="display:none;"><div class="b3-dm-layer" id="b3DmLayerI"></div></div>' +
       '<div class="b3-share-grid" id="b3ShareGrid"></div>' +
       '</div>';
     var lux = document.getElementById('bLux');
@@ -1034,11 +1034,13 @@
       if (o) {
         o.style.display = 'block';
         var analysis = String(r.analysis || '');
-        var poem = '';
+        var poem = String(r.poem || '');
         var lines = analysis.split(/\n/);
         var poemIdx = -1;
-        for (var i = 0; i < lines.length; i++) {
-          if (/^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/.test(lines[i])) { poemIdx = i; break; }
+        if (!poem) {
+          for (var i = 0; i < lines.length; i++) {
+            if (/^\s*(?:\d+[.)、]\s*)?诗[曰：:]\s*/.test(lines[i])) { poemIdx = i; break; }
+          }
         }
         if (poemIdx > -1) {
           var got = [];
@@ -1048,20 +1050,21 @@
           }
           poem = got.join('\n');
         }
-        if (!poem && r.poem) poem = String(r.poem);
-        var beadsHtml = (r.stones || []).map(function (b) {
-          return '<span class="ai-bead">' + esc(b.name) + ' ×' + b.count + (b.color ? ' <i style="font-style:normal;display:inline-block;width:9px;height:9px;border-radius:50%;background:' + esc(b.color) + ';vertical-align:-1px;margin-left:2px;"></i>' : '') + '</span>';
-        }).join('');
+        /* poem 已优先取服务端字段 */
+        /* 配比与串序仅用于后台出图，不在前端展示 */
+        var beadsHtml = '';
         var imgHtml = '';
         if (r.url) {
           imgHtml = '<div style="margin-top:12px;text-align:center;"><img src="' + esc(r.url) + '" alt="AI 设计图" style="max-width:100%;max-height:340px;border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.18);border:1px solid rgba(201,169,110,.5);" onclick="window.__b3Lightbox(\'\',\'' + esc(r.url).replace(/'/g, '') + '\',\'AI 设计图\')"></div><div style="font-size:10.5px;color:var(--text-light);margin-top:6px;text-align:center;">AI 生图预览（点击放大）· 实物以定制为准</div>';
         }
+        var cleanAnalysis = String(analysis || '').split(/\n/).filter(function (ln) {
+          return !/^\s*(?:\d+[.)、]\s*)?(石[:：]|石序[:：]|数量[:：]|色[:：])/.test(ln.trim());
+        }).join('\n').trim();
         o.innerHTML =
           '<div class="ai-design-box">' +
           '<div class="ai-robot"><span>小桦 · 设计助手</span></div>' +
           '<div class="ai-title">' + (mode === 'hex' ? '卦象分析' : mode === 'bazi' ? '生辰设计' : '随缘搭配') + '</div>' +
-          '<div class="ai-text">' + (function () { var f = get('fmtAiAnalysis'); try { if (typeof f === 'function') return f(analysis); } catch (e) {} return esc(analysis).replace(/\n/g, '<br>'); })() + '</div>' +
-          (beadsHtml ? '<div class="ai-beads">' + beadsHtml + '</div>' : '') +
+          '<div class="ai-text">' + (function () { var f = get('fmtAiAnalysis'); try { if (typeof f === 'function') return f(cleanAnalysis); } catch (e) {} return esc(cleanAnalysis).replace(/\n/g, '<br>'); })() + '</div>' +
           (poem ? '<div class="ai-poem">' + esc(poem).replace(/\n/g, '<br>') + '</div>' : '') +
           imgHtml +
           '<div style="font-size:10px;color:var(--text-light);margin-top:8px;">以上分析为文化意象参考 · 不构成任何承诺</div>' +
@@ -1096,7 +1099,7 @@
         for (var p2 = 0; p2 < pushed.length; p2++) bb.push(pushed[p2]);
         call('drawBracelet', []);
       }
-      toast('✅ AI 设计完成：' + (r.stones || []).length + ' 种晶石 · ' + mmTotal(mm) + ' 颗 · 已出图');
+      toast('✅ 设计已生成（含效果图）');
       var qc = call('consumeAiQuota', []);
     } catch (e) {
       toast('AI 调用失败：' + (e && e.message ? e.message : e));
