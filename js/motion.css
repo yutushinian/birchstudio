@@ -109,10 +109,35 @@
 /* 说明：未对卡片列表使用 contain:paint —— 它会裁剪卡片的投影与悬停放大外溢，
    为避免视觉回归故不做该项优化。 */
 
-/* ---------- 3) 滚动渐进入场（由 html.b-motion 门控） ----------
-   位移统一走 CSS 的 translate 通道，绝不动 transform：
-   既有卡片悬停用的是 transform:translateY(-5px)，两者是相互独立的属性，
-   因此「入场下移」与「悬停抬升」不会互相覆盖，也不会在触屏媒体查询里打架。 */
+/* ---------- 3) 渐进入场 ---------- */
+
+/* 3.1 站内既有 .reveal 系统的「纯 CSS 保底」
+   ------------------------------------------------------------
+   现状：bundle.js 用 IntersectionObserver 给 #brand .reveal 加 .in，
+   而 CSS 把初始态写成 opacity:0 —— 也就是说内容可见性完全押在 JS 上：
+   脚本加载慢、被 CDN 阻塞、或中途抛错，文字与卡片就永远不出现。
+   这里用 animation 做兜底（动画优先级高于站内那条 transition，
+   属性层无需 !important）：
+     · 2.4s 后才开始 —— 站内观察器正常工作的话，此时早已加上 .in，本动画
+       作用在最终状态上、用户完全无感，不会抢掉站内的交错节奏；
+     · 只对「仍未被站内加上 .in」的元素生效（:not(.in)），一旦加了 .in
+       目标选择器立刻不再匹配，动画随之取消。
+   这样既保住站内的滚动节奏，又保证任何情况下文字都会出现。 */
+@keyframes bRevealFallback{
+  from{opacity:0;transform:translateY(28px)}
+  to{opacity:1;transform:translateY(0)}
+}
+html.b-motion #brand .reveal:not(.in){
+  animation:bRevealFallback .9s var(--ease-decel) 2.4s forwards;
+}
+/* 带 data-d 阶梯的站内元素，保底时保留同样的层次感 */
+html.b-motion #brand .reveal[data-d="1"]:not(.in){animation-delay:2.52s}
+html.b-motion #brand .reveal[data-d="2"]:not(.in){animation-delay:2.64s}
+html.b-motion #brand .reveal[data-d="3"]:not(.in){animation-delay:2.76s}
+html.b-motion #brand .reveal[data-d="4"]:not(.in){animation-delay:2.88s}
+
+/* 3.2 本层自有渐进入场：仅用于站内 .reveal 未覆盖的区块
+   位移走 CSS 独立 translate 通道，与站内 transform 位移互不覆盖。 */
 html.b-motion .b-reveal{
   opacity:0;
   translate:0 30px;
@@ -236,11 +261,13 @@ input,textarea,select{
   /* 5.2 落叶停止飘落并隐藏，避免持续视觉干扰 */
   .b-leaf-layer{display:none!important}
   /* 5.2b 站内既有 .reveal 系统原本无视系统偏好 —— 这里补上降级：
-     元素仍会显示（不依赖脚本），只是不再做位移淡入 */
-  #brand .reveal{
+     元素直接可见，不做位移淡入，连保底动画也一并取消 */
+  #brand .reveal,
+  #brand .reveal:not(.in){
     opacity:1!important;
     transform:none!important;
     transition:none!important;
+    animation:none!important;
   }
   /* 5.3 渐进入场降级为纯淡入：不做位移与缩放 */
   html.b-motion .b-reveal{
