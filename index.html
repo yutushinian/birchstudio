@@ -37,6 +37,8 @@
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="preconnect" href="https://fastly.jsdelivr.net">
   <link rel="preconnect" href="https://gcore.jsdelivr.net">
+  <!-- 统一动效层：令牌 / 合成层优化 / 渐进入场 / 无障碍降级 -->
+  <link rel="stylesheet" href="js/motion.css?v=20260916">
 </head>
 
 <body>
@@ -1969,16 +1971,37 @@
   <!-- 提示框 -->
   <div class="toast" id="toast"></div>
   
-  <!-- 白桦落叶动效 -->
-  <div style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:hidden;">
-    <div style="position:absolute;top:-10%;left:8%;font-size:18px;opacity:0;animation:leafFall 14s linear infinite;">🍃</div>
-    <div style="position:absolute;top:-10%;left:25%;font-size:14px;opacity:0;animation:leafFall 17s linear infinite 3s;">🌿</div>
-    <div style="position:absolute;top:-10%;left:65%;font-size:20px;opacity:0;animation:leafFall 15s linear infinite 1s;">🍃</div>
-    <div style="position:absolute;top:-10%;left:82%;font-size:16px;opacity:0;animation:leafFall 18s linear infinite 5s;">🌿</div>
-    <div style="position:absolute;top:-10%;left:45%;font-size:13px;opacity:0;animation:leafFall 16s linear infinite 7s;">🍃</div>
+  <!-- 白桦落叶动效（v2：语义化 + CSS 变量驱动，可无障碍降级/可省电） -->
+  <div class="b-leaf-layer" data-leaf-layer="1" aria-hidden="true">
+    <i>🍃</i><i>🍃</i><i>🍃</i><i>🍃</i><i>🍃</i><i>🍃</i><i>🍃</i>
   </div>
-  <style>@keyframes leafFall{0%{transform:translateY(0) rotate(0) translate(0);opacity:0}8%{opacity:.45}90%{opacity:.3}to{transform:translateY(110vh) rotate(280deg) translate(20px);opacity:0}}
-</style>
+  <style>
+  /* 落叶层：满屏装饰层，置于内容之下且不接收指针事件 */
+  .b-leaf-layer{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:hidden}
+  .b-leaf-layer i{
+    position:absolute;top:-10%;font-size:16px;font-style:normal;opacity:0;
+    will-change:transform,opacity;
+    color:#8fbfa3;
+    text-shadow:0 1px 2px rgba(28,42,34,.18);
+    animation:leafFall var(--lf-dur,17s) linear var(--lf-delay,0s) infinite;
+  }
+  /* 七片叶子：左半幅分布 + 不同尺寸，形成三层纵深感 */
+  .b-leaf-layer i:nth-child(1){left:6%;font-size:19px}
+  .b-leaf-layer i:nth-child(2){left:21%;font-size:13px}
+  .b-leaf-layer i:nth-child(3){left:37%;font-size:16px;color:#a9cbb4}
+  .b-leaf-layer i:nth-child(4){left:52%;font-size:12px}
+  .b-leaf-layer i:nth-child(5){left:68%;font-size:20px;color:#7fae93}
+  .b-leaf-layer i:nth-child(6){left:81%;font-size:15px}
+  .b-leaf-layer i:nth-child(7){left:93%;font-size:11px;color:#a9cbb4}
+  /* 飘落轨迹：下落 + 横向漂移 + 连续自转，末段轻微模糊模拟景深 */
+  @keyframes leafFall{
+    0%{transform:translate3d(0,-12vh,0) rotate(0deg);opacity:0}
+    8%{opacity:.48}
+    50%{transform:translate3d(calc(var(--lf-drift,16px) * .55),46vh,0) rotate(180deg);opacity:.42}
+    88%{opacity:.28}
+    100%{transform:translate3d(var(--lf-drift,16px),112vh,0) rotate(360deg);opacity:0}
+  }
+  </style>
   
   <!-- NFC 二选一浮层：扫码后在节气卦动图上方弹出（像二级菜单展开：抽一签 / 答案之书） -->
   <div class="nfc-mask" id="nfcEntryMask" onclick="hideNfcEntry()"></div>
@@ -2117,6 +2140,6 @@ window.aiDesign=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){
 var oc=g("oneClickConfig");if(typeof oc==="function"){window.oneClickConfig=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){window.aiDesign(mode);}else{oc(mode);}};}
 window.__b3AiHook=1;window.__b3v="20260909a";
 })();
-</script></body>
+</script><script src="js/motion.js?v=20260916"></script></body>
 
 </html>
