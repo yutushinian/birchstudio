@@ -65,21 +65,35 @@
     } catch (e) { io = null; }
   }
 
-  /* ---------- 标记 + 分组交错 ---------- */
+  /* ---------- 标记 + 分组交错 ----------
+     对每个目标容器：优先找容器内已带 .b-reveal 的子项（可精细化控制），
+     若一个都没有，则退化为标记它的直接子元素 —— 因为站内这些区块
+     本身没有 .b-reveal 类，只标记容器等于没有渐进入场。 */
   function mark() {
     for (var t = 0; t < REVEAL_TARGETS.length; t++) {
       var found;
       try { found = doc.querySelectorAll(REVEAL_TARGETS[t]); } catch (e) { continue; }
       for (var i = 0; i < found.length; i++) {
-        var el = found[i];
-        if (el.classList.contains('b-reveal')) continue;
-        el.classList.add('b-reveal');
-        el.setAttribute('data-b-reveal-item', '1');
-        // 同组交错：按同选择器内的出现顺序排延迟
-        el.style.setProperty('--rv-delay', Math.min(i * STAGGER, STAGGER_CAP) + 'ms');
-        marked.push(el);
-        if (io) io.observe(el);
-        else el.classList.add('b-in');   // 无观察器则直接显示
+        var box = found[i];
+        if (box.getAttribute('data-b-ready') === '1') continue;
+
+        var items;
+        try { items = box.querySelectorAll('.b-reveal'); } catch (e) { items = []; }
+        if (!items || !items.length) items = box.children || [];
+        if (!items.length) continue;
+
+        box.setAttribute('data-b-ready', '1');
+        for (var j = 0; j < items.length; j++) {
+          var el = items[j];
+          if (!el || !el.classList || el.classList.contains('b-reveal')) continue;
+          el.classList.add('b-reveal');
+          el.setAttribute('data-b-reveal-item', '1');
+          // 同组交错：按出现顺序排延迟
+          el.style.setProperty('--rv-delay', Math.min(j * STAGGER, STAGGER_CAP) + 'ms');
+          marked.push(el);
+          if (io) io.observe(el);
+          else el.classList.add('b-in');   // 无观察器则直接显示
+        }
       }
     }
   }
