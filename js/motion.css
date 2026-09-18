@@ -1,0 +1,292 @@
+/* ============================================================
+   桦库 · 统一动效层 v1（20260916）
+   ------------------------------------------------------------
+   1) 动效令牌：时长/缓动单一来源，替代 167 处硬编码节奏
+   2) 合成层优化：重绘型动画（box-shadow）改为 transform+opacity
+   3) 滚动渐进入场：接管既有 .reveal 未覆盖的区块（见下）
+   4) 微交互精修：悬停/按下/聚焦反馈节奏统一
+   5) 无障碍：prefers-reduced-motion 全量降级 —— 含站内既有 .reveal 系统
+   ------------------------------------------------------------
+   站内既有动画体系（勿重复造轮子）：
+     · .reveal → bundle.js 用 IntersectionObserver(threshold .12) 加 .in，
+       transition .9s，覆盖 b-sec-head / b-pstep / b-wx / b-step 等
+     · #homePanel .brand-story / .func-grid / .lux-process → keyframes homeIn
+     · #homePanel .func-card / #luxPicksGrid .lp-item / #galleryGrid .gallery-item
+       → keyframes cardPop（已带 nth-child 交错）
+   本层只补它们缺的部分：容器级渐进入场、统一缓动、合成层与无障碍。
+
+   安全设计：追加层，不修改任何既有 CSS 文件。
+   渐进入场的隐藏态全部挂在 html.b-motion 之下 ——
+   若 motion.js 未执行，该类不会被添加，内容始终可见，无白屏风险。
+   回滚：删除本文件与 <link>/<script> 两行引用即可。
+   ============================================================ */
+
+/* ---------- 1) 动效令牌 ---------- */
+:root{
+  --dur-instant:90ms;
+  --dur-fast:150ms;
+  --dur-base:260ms;
+  --dur-slow:420ms;
+  --dur-enter:560ms;
+
+  --ease-standard:cubic-bezier(.22,.61,.21,1);
+  --ease-decel:cubic-bezier(.16,1,.3,1);
+  --ease-accel:cubic-bezier(.55,.06,.68,.19);
+  --ease-soft:cubic-bezier(.65,0,.35,1);
+  --ease-spring:cubic-bezier(.34,1.56,.64,1);
+
+  --motion-lift:-3px;
+  --motion-hover-scale:1.015;
+  --motion-press-scale:.972;
+  --motion-stagger:56ms;
+}
+
+/* ---------- 2) 合成层优化 ---------- */
+
+/* 2.1 桦金呼吸光
+   原实现动画 box-shadow（每帧重绘整个光晕），移动端明显掉帧。
+   改为静态辉光 + 伪元素做 transform/opacity 合成动画，观感一致。 */
+#brand .b-proj-light i{
+  animation:none!important;
+  position:relative;
+  box-shadow:0 0 26px 8px rgba(245,200,105,.5),0 0 60px 22px rgba(245,200,105,.2);
+}
+#brand .b-proj-light i:after{
+  content:"";
+  position:absolute;
+  inset:-6px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(245,200,105,.85),rgba(245,200,105,0) 70%);
+  pointer-events:none;
+  will-change:transform,opacity;
+  animation:breatheGlow 3.2s ease-in-out infinite;
+}
+@keyframes breatheGlow{
+  0%,100%{transform:scale(.92);opacity:.4}
+  50%{transform:scale(1.18);opacity:.9}
+}
+
+/* 2.2 节气「当前」脉冲
+   原为动画 box-shadow，改为伪元素扩散环（transform+opacity）。 */
+#brand .b-jieqi-card .b-jieqi-now-tag{animation:none!important;isolation:isolate}
+#brand .b-jieqi-card .b-jieqi-now-tag:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:999px;
+  border:2px solid var(--green-main,#4a7c59);
+  pointer-events:none;
+  will-change:transform,opacity;
+  animation:pulseRing 2s cubic-bezier(.22,.61,.21,1) infinite;
+}
+@keyframes pulseRing{
+  0%{transform:scale(1);opacity:.5}
+  70%,100%{transform:scale(1.7);opacity:0}
+}
+
+/* 2.3 按钮悬停反馈
+   原实现：.btn:hover 触发 haloSpread 动画（动画 box-shadow，每帧重绘 + 位移抖动）。
+   注意：.btn:before 是扫光、.btn:after 已被点击波纹占用
+   （站内 .btn:active:after{animation:ripple}），因此这里绝不能再定义 .btn:after，
+   否则会覆盖波纹。改用 filter 提亮：合成层动画，观感接近且开销更低。
+   同时也不给 .btn 本体声明 transition —— 那会覆盖站内 .btn 自带的过渡节奏。 */
+.btn:hover{animation:none!important;filter:brightness(1.05)}
+
+/* 2.4 常驻动画元素提升为独立合成层，避免连累父容器重绘 */
+.method .icon,
+.brand-header,
+.result-card.show:before,
+#brand .b-marquee-track,
+.ai-glow,.ai-spark,.enter-brand,.enter-line-fill,
+.spinner,.spinner:after{
+  will-change:transform,opacity;
+  backface-visibility:hidden;
+  transform:translateZ(0);
+}
+/* 大旋转体长期占用显存收益低，只保底不提升 */
+.ai-orbit,.ai-taiji,.ai-robot-big{will-change:auto;backface-visibility:visible}
+
+/* 说明：未对卡片列表使用 contain:paint —— 它会裁剪卡片的投影与悬停放大外溢，
+   为避免视觉回归故不做该项优化。 */
+
+/* ---------- 3) 滚动渐进入场（由 html.b-motion 门控） ----------
+   位移统一走 CSS 的 translate 通道，绝不动 transform：
+   既有卡片悬停用的是 transform:translateY(-5px)，两者是相互独立的属性，
+   因此「入场下移」与「悬停抬升」不会互相覆盖，也不会在触屏媒体查询里打架。 */
+html.b-motion .b-reveal{
+  opacity:0;
+  translate:0 30px;
+  scale:.98;
+  transition:
+    opacity var(--dur-enter) var(--ease-decel),
+    translate var(--dur-enter) var(--ease-decel),
+    scale var(--dur-enter) var(--ease-decel);
+  transition-delay:var(--rv-delay,0ms);
+}
+html.b-motion .b-reveal.b-in{
+  opacity:1;
+  translate:0 0;
+  scale:1;
+}
+/* 横向变体：左右滑入 */
+html.b-motion .b-reveal.b-reveal-x{translate:-24px 0}
+html.b-motion .b-reveal.b-reveal-x.b-in{translate:0 0}
+html.b-motion .b-reveal.b-reveal-right{translate:24px 0}
+html.b-motion .b-reveal.b-reveal-right.b-in{translate:0 0}
+/* 从 0 缩放入场（用于单图/徽标） */
+html.b-motion .b-reveal.b-reveal-pop{translate:0 14px;scale:.94}
+html.b-motion .b-reveal.b-reveal-pop.b-in{translate:0 0;scale:1}
+
+/* ---------- 4) 微交互精修 ---------- */
+
+/* 4.0 弹簧过渡工具（供后续扩展复用） */
+.st-spring{
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    scale var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-base) var(--ease-standard);
+}
+
+/* 4.1 可点卡片：悬停抬升 + 轻微放大，按下即时回弹
+   只收录「既有样式既没声明过渡、也没声明悬停位移」的卡片。
+   #luxPicksGrid .lp-item / .ck-item / .b3-card 等自带 transition 或悬停位移，
+   强行介入会覆盖原有手感，故一律不碰。 */
+.gallery-item,
+.func-card{
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    scale var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-base) var(--ease-standard);
+}
+.gallery-item:hover,
+.func-card:hover{
+  transform:translateY(var(--motion-lift));
+  scale:var(--motion-hover-scale);
+  box-shadow:0 14px 32px rgba(47,92,64,.17);
+}
+.gallery-item:active,
+.func-card:active{
+  scale:var(--motion-press-scale);
+  transition-duration:var(--dur-instant);
+}
+
+/* 4.2 按钮：按下即时、抬起回弹
+   刻意不给 .btn 直接写 transition —— .btn:after 的光晕靠自身过渡淡入，
+   写在同一元素上会连带动画属性，故只声明 :hover / :active 的目标状态。 */
+.btn:hover,.b3-btn-main:hover{transform:translateY(-1px)}
+.btn:active,.b3-fab:active,.b3-btn-main:active,.b3-aiq-btn:active,.b3-close:active{
+  transform:scale(var(--motion-press-scale));
+  transition-duration:var(--dur-instant);
+}
+
+/* 4.3 品牌页卡片：既有 hover 抬升沿用原样式，只把缓动统一到同一套弹簧，
+       消除「有的卡弹、有的卡硬切」的割裂感（不覆盖它们的位移值与阴影） */
+#brand .b-lux-grid .lp-item,
+#brand .b-care-card,
+#brand .b-jieqi-card,
+#brand .b-wish-card,
+#brand .b-gua-card,
+#brand .b-wx{
+  transition:transform var(--dur-base) var(--ease-spring),
+             box-shadow var(--dur-base) var(--ease-standard),
+             border-color var(--dur-base) var(--ease-standard),
+             background-color var(--dur-base) var(--ease-standard);
+}
+
+/* 4.4 键盘聚焦可见（无障碍必需，不影响鼠标体验） */
+.btn:focus-visible,
+.b3-fab:focus-visible,
+.gallery-item:focus-visible,
+.b3-card:focus-visible,
+.func-card:focus-visible,
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible{
+  outline:2px solid var(--green-main,#4a7c59);
+  outline-offset:3px;
+}
+
+/* 4.5 表单聚焦：边框与内阴影过渡更顺，避免跳变 */
+input,textarea,select{
+  transition:border-color var(--dur-base) var(--ease-standard),box-shadow var(--dur-base) var(--ease-standard);
+}
+
+/* 说明：灯箱换页未做额外处理 —— 图片自带 fill-forwards 的 imgZoomIn 动画，
+   位移由 .lightbox-img-wrap.lb-anim-* 承担；再叠加 transform 过渡会互相覆盖产生跳帧。 */
+
+/* ---------- 5) 无障碍：减弱动效 ---------- */
+@media (prefers-reduced-motion:reduce){
+  /* 5.1 常驻循环动画停止 */
+  .brand-header,
+  .method:before,
+  .method .icon,
+  .enter-brand,
+  .enter-line-fill,
+  .ai-orbit,.ai-taiji,.ai-glow,.ai-spark,.ai-loading-text,.ai-robot-big,
+  .spinner,.spinner:after,
+  #brand .b-marquee-track,
+  #brand .b-proj-light i:after,
+  #brand .b-jieqi-card .b-jieqi-now-tag:after,
+  .result-card.show:before,
+  .b3-fab-dot{
+    animation:none!important;
+  }
+  /* 5.2 落叶停止飘落并隐藏，避免持续视觉干扰 */
+  .b-leaf-layer{display:none!important}
+  /* 5.2b 站内既有 .reveal 系统原本无视系统偏好 —— 这里补上降级：
+     元素仍会显示（不依赖脚本），只是不再做位移淡入 */
+  #brand .reveal{
+    opacity:1!important;
+    transform:none!important;
+    transition:none!important;
+  }
+  /* 5.3 渐进入场降级为纯淡入：不做位移与缩放 */
+  html.b-motion .b-reveal{
+    translate:none!important;
+    scale:none!important;
+    transition:opacity var(--dur-base) linear!important;
+    transition-delay:0ms!important;
+  }
+  /* 5.4 指针反馈保留颜色/阴影，取消位移
+     只关掉本层引入位移的元素；其余卡片（.b-pstep/.b-gua-card/.b-lux-grid .lp-item…）
+     本身就在自己样式表内声明 reduced-motion 降级，不在此重复干预。 */
+  .gallery-item:hover,.func-card:hover,
+  .btn:hover,.b3-btn-main:hover{
+    transform:none!important;
+    scale:1!important;
+  }
+  .gallery-item:active,.func-card:active,
+  .btn:active,.b3-fab:active,.b3-close:active,.b3-aiq-btn:active{scale:1!important}
+}
+
+/* ---------- 6) 触屏与低端设备：收敛常驻动画 ---------- */
+@media (hover:none){
+  /* 触屏无悬停语义且无指针，把装饰性常驻动画全部停下：
+     省电、降低 GPU 占用，交互反馈反而更跟手 */
+  .brand-header,
+  .method:before,
+  .method .icon,
+  .result-card.show:before,
+  .enter-brand,
+  .enter-line-fill,
+  .ai-orbit,.ai-taiji,.ai-glow,.ai-spark,.ai-robot-big,
+  #brand .b-marquee-track,
+  #brand .b-proj-light i:after,
+  #brand .b-jieqi-card .b-jieqi-now-tag:after{
+    animation:none!important;
+  }
+  /* 触屏下隐藏落叶层：持续满屏合成动画在手机上收益低、耗电高 */
+  .b-leaf-layer{display:none!important}
+}
+@media (max-width:640px){
+  /* 落叶层已由 (hover:none) 隐藏；此处仅为「窄屏但有指针」的设备（如小窗桌面）减量 */
+  .b-leaf-layer i:nth-child(n+4){display:none}
+}
+
+/* ---------- 7) 打印：不输出动效 ---------- */
+@media print{
+  .b-leaf-layer,.spinner,.spinner:after{display:none!important}
+  html.b-motion .b-reveal{opacity:1!important;translate:none!important;scale:none!important;transition:none!important}
+}
