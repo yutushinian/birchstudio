@@ -2091,8 +2091,8 @@
 <script src="js/bundle.js" defer></script>
 <!-- 邮件收件人修复：客户通知改投客户邮箱（详见 js/fixes.js 头部说明） -->
 <script defer src="js/fixes.js?v=20260916"></script>
-<script src="js/features.js?v=20260909r"></script><script>
-/* b3-ai-shim 20260909a */
+<script src="js/features.js?v=20260922a"></script><script>
+/* b3-ai-shim 20260922a */
 (function(){
 if(window.__b3AiHook)return;
 var W="https://cplyzukenqxdwhfivlqx.supabase.co/functions/v1/birch-ai";
@@ -2141,10 +2141,32 @@ var cq=g("consumeAiQuota");if(typeof cq==="function"){try{cq();}catch(e){}}
 }catch(e){toast("AI 调用失败："+((e&&e.message)||e));if(mode==="random"){var rb2=g("randomBracelet");if(typeof rb2==="function"){try{rb2();toast("已用本地随缘搭配代替 ✨");}catch(e2){}}}}
 finally{var hl=g("hideLoading");if(typeof hl==="function"){try{hl();}catch(e){}}}
 }
-var orig=g("aiDesign");
-window.aiDesign=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){aiNew(mode);}else if(typeof orig==="function"){orig(mode);}};
-var oc=g("oneClickConfig");if(typeof oc==="function"){window.oneClickConfig=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){window.aiDesign(mode);}else{oc(mode);}};}
-window.__b3AiHook=1;window.__b3v="20260909a";
+/* ★ 安装时机：本段是内联脚本，解析期就执行；而 js/bundle.js 带 defer，
+   要到整篇文档解析完才跑。bundle 顶层那两个 function aiDesign / function
+   oneClickConfig 声明会直接覆盖这里写下的 window.aiDesign / window.oneClickConfig
+   —— 所以过去这段 shim 从未真正生效（AI 定制因此失真）。
+   现在改为：等 bundle 就绪（window.oneClickConfig 出现）后再安装；
+   若 birch3.js 已接管（window.__b3AiHookV2），本段整体让位，
+   只在 birch3.js 加载失败时充当兜底。 */
+function b3Install(){
+  if(window.__b3AiHookV2)return true;      /* birch3 已接管，让位 */
+  if(typeof window.oneClickConfig!=="function"||typeof window.aiDesign!=="function")return false;
+  var orig=window.aiDesign;
+  window.aiDesign=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){aiNew(mode);}else if(typeof orig==="function"){orig(mode);}};
+  var oc=window.oneClickConfig;
+  window.oneClickConfig=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){window.aiDesign(mode);}else{oc(mode);}};
+  window.__b3AiHook=1;window.__b3v="20260922a";
+  return true;
+}
+var b3w=0;
+function b3Boot(){
+  if(b3Install())return;
+  if(b3w++>120)return;
+  setTimeout(b3Boot,100);
+}
+/* 延后 900ms：把优先权让给 birch3.js（它在 DOMContentLoaded 时接管） */
+if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",function(){setTimeout(b3Boot,900);});}
+else{setTimeout(b3Boot,900);}
 })();
 </script><script src="js/motion.js?v=20260916b"></script><script src="js/theme.js?v=20260918a" defer></script></body>
 
