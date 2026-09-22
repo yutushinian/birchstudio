@@ -42,9 +42,17 @@
     return get('supabaseClient');
   }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  var SUPABASE_URL = get('SUPABASE_URL') || '';
-  var SUPABASE_ANON = get('SUPABASE_ANON_KEY') || '';
-  var AI_DEFAULT_URL = (SUPABASE_URL ? SUPABASE_URL.replace(/\/$/, '') : '') + '/functions/v1/birch-ai';
+  /* 关键：js/bundle.js 带 defer，本文件可能先于 bundle 执行（features.js 动态注入，
+     默认 async）。所以任何依赖 bundle 全局的值都必须在「调用时」再取，不能在模块顶层
+     快照 —— 否则拿到空串，AI 地址会退化成相对路径 /functions/v1/birch-ai，
+     打到静态站上必定 404（这就是「点智能搭配报错/没反应」的直接原因之一）。 */
+  function SB_URL() { return String(get('SUPABASE_URL') || ''); }
+  function SB_ANON() { return String(get('SUPABASE_ANON_KEY') || ''); }
+  function fnUrl(name) {
+    var u = SB_URL().replace(/\/$/, '');
+    return u ? u + '/functions/v1/' + name : '';
+  }
+  function aiEndpoint() { return fnUrl('birch-ai'); }
   var CFG_KEY = 'birch_share_discount';
   var LOCAL_KEY = 'birch3_shares_v1';
 
@@ -131,9 +139,9 @@
    * 客户授权分享区（首页「臻选推荐」正上方内嵌）+ 留言弹幕
    * ============================================================ */
   var dmTimer = null, dmQueue = [], dmColors = ['b3-dm-1', 'b3-dm-2', 'b3-dm-3'], b3SData = [];
-  var EMAIL_URL = (get('SUPABASE_URL') || '').replace(/\/$/, '') + '/functions/v1/email-send';
   function sendShareMail(row, subject) {
     try {
+      var EMAIL_URL = fnUrl('email-send');   /* 同样延后到调用时再解析（见文件头说明） */
       if (!EMAIL_URL) return;
       fetch(EMAIL_URL, {
         method: 'POST',
@@ -996,7 +1004,6 @@
   /* ============================================================
    * AI 生辰测石适配：ai-assistant（DeepSeek → 通义出图）
    * ============================================================ */
-  var origAiDesign = window.aiDesign;
   var ZODIAC = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
   function zodiacOf(year) {
     var y = Number(year);
@@ -1021,13 +1028,24 @@
       var lh0 = get('lastHex');
       if (!lh0 || !lh0.name) { toast('请先摇卦，再让 AI 分析'); return; }
     }
-    var fu = AI_DEFAULT_URL || '';
+    /* 端点解析：优先用后台配置里指向 birch-ai / ai-assistant 的绝对地址；
+       否则回落到由 bundle 全局 SUPABASE_URL 拼出的绝对地址。
+       注意：两个来源都只在「此刻」求值 —— 绝不允许出现相对路径，
+       否则请求会打到静态站自己身上，得到 404 的 HTML 而不是 JSON。 */
+    var fu = '';
     try {
       var cfg = get('aiConfig');
-      // 只信任指向 birch-ai / ai-assistant 的旧配置；其余（含旧 ai-design）一律用默认 birch-ai，
-      // 避免把请求发给无 design 模式的老函数（报“缺少问题内容”）
-      if (cfg && cfg.funcUrl && /birch-ai|ai-assistant/i.test(cfg.funcUrl)) fu = cfg.funcUrl;
+      var cu = cfg && cfg.funcUrl ? String(cfg.funcUrl) : '';
+      if (cu && /^https?:\/\//i.test(cu) && /birch-ai|ai-assistant/i.test(cu)) fu = cu;
     } catch (e) {}
+    if (!fu) fu = aiEndpoint();
+    if (!/^https?:\/\//i.test(fu)) {
+      var tipNo = $('b3AiQuickTip');
+      if (tipNo) tipNo.textContent = '⚠️ AI 服务地址未就绪，请刷新页面后重试';
+      toast('AI 服务地址未就绪：请刷新页面后重试；若仍不行请到后台「AI 智能设计」检查函数地址');
+      return;
+    }
+    var anonK = SB_ANON();
     var kind = mode === 'hex' ? 'hex' : mode === 'bazi' ? 'bazi' : 'free';
     var info = {};
     if (mode === 'bazi') {
@@ -1037,6 +1055,10 @@
       if (lb && lb.ganzhi) info.ganzhi = lb.ganzhi;
       if (lb && lb.dayMaster) info.dayMaster = lb.dayMaster;
       if (lb && lb.wuxing) info.wuxing = lb.wuxing;
+      /* 后端 birch-ai 的 bazi 分支读的是 info.el（本命/喜用五行），
+         之前没传 → 模型只看到「本命五行?」，方案会泛。这里补上排盘算出的喜用。 */
+      if (lb && lb.xiyong) info.el = lb.xiyong;
+      if (lb && lb.hourLabel) info.hourLabel = lb.hourLabel;
     } else if (mode === 'hex') {
       var lh = get('lastHex') || {};
       info = { name: lh.name || '', sym: lh.sym || '', idea: lh.idea || '', wu: lh.wu || '' };
@@ -1052,7 +1074,7 @@
     try {
       var res = await fetch(fu, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON, Authorization: 'Bearer ' + SUPABASE_ANON },
+        headers: { 'Content-Type': 'application/json', apikey: anonK, Authorization: 'Bearer ' + anonK },
         body: JSON.stringify({ mode: 'design', kind: kind, info: info, mm: mm })
       });
       var text = await res.text();
@@ -1060,6 +1082,8 @@
       try { r = JSON.parse(text); } catch (e) { r = { raw: text.slice(0, 300) }; }
       if (!res.ok || !r || !r.ok) {
         var err = (r && (r.error || r.raw)) || ('HTTP ' + res.status);
+        var tipErr = $('b3AiQuickTip');
+        if (tipErr) tipErr.textContent = '⚠️ 生成失败：' + String(err).slice(0, 40);
         toast('AI 服务错误：' + err);
         if (mode === 'random') { try { call('randomBracelet', []); toast('已用本地随缘搭配代替 ✨'); } catch (e2) {} }
         if (/未配置|密钥|SILICON|img_key/i.test(String(err))) {
@@ -1096,7 +1120,20 @@
         var beadsHtml = '';
         var imgHtml = '';
         if (r.url) {
-          imgHtml = '<div style="margin-top:12px;text-align:center;"><img src="' + esc(r.url) + '" alt="AI 设计图" style="max-width:100%;max-height:340px;border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.18);border:1px solid rgba(201,169,110,.5);" onclick="window.__b3Lightbox(\'\',\'' + esc(r.url).replace(/'/g, '') + '\',\'AI 设计图\')"></div><div style="font-size:10.5px;color:var(--text-light);margin-top:6px;text-align:center;">AI 生图预览（点击放大）· 实物以定制为准</div>';
+          /* 出图可能是 data:image/png;base64（很长）。若再把它塞进 onclick 属性，
+             整段 HTML 体积翻倍，手机上会明显卡顿 —— 所以只有 http(s) 外链才挂放大点击。
+             引号一律百分号编码：HTML 解析器会把实体解回来，裸引号会截断 JS 字符串。 */
+          var u = String(r.url);
+          var su = esc(u).replace(/&#39;/g, '%27').replace(/&quot;/g, '%22');
+          var zoomAttr = /^https?:/i.test(u)
+            ? ' onclick="window.__b3Lightbox(\'\',\'' + su + '\',\'AI 设计图\')"'
+            : '';
+          imgHtml = '<div class="ai-img-wrap"><img class="ai-img" src="' + esc(u) + '" alt="AI 设计图"' + zoomAttr + '></div><div class="ai-img-cap">AI 生图预览（点击放大）· 实物以定制为准</div>';
+        } else {
+          /* 出图失败不再是「静默的」：把服务端给的原因直接显示出来，
+             否则用户只会觉得"图不对/没图"却无从判断是密钥、额度还是网络问题。 */
+          imgHtml = '<div class="ai-img-warn">⚠️ 方案已生成，但<b>效果图没有出</b>：' +
+            esc(String(r.img_error || '出图服务未返回图片（可能密钥未配置、额度用尽或网络不通）')) + '</div>';
         }
         var cleanAnalysis = String(analysis || '').split(/\n/).filter(function (ln) {
           return !/^\s*(?:\d+[.)、]\s*)?(石[:：]|石序[:：]|数量[:：]|色[:：])/.test(ln.trim());
@@ -1117,7 +1154,7 @@
           }, 400);
         } catch (e) {}
         var tip2 = $('b3AiQuickTip');
-        if (tip2) tip2.textContent = '✅ 已生成：效果图在上方 ↑ 可点图放大';
+        if (tip2) tip2.textContent = r.url ? '✅ 已生成：效果图在上方 ↑ 可点图放大' : '✅ 方案已生成 · ⚠️ 效果图未出（原因见结果卡）';
       }
       /* 按 DeepSeek 配比刷新手串预览 */
       var cb = call('clearBracelet', []);
@@ -1143,7 +1180,11 @@
       toast('✅ 设计已生成（含效果图）');
       var qc = call('consumeAiQuota', []);
     } catch (e) {
-      toast('AI 调用失败：' + (e && e.message ? e.message : e));
+      var em = String((e && e.message) || e || '');
+      var isNet = /Failed to fetch|NetworkError|Load failed|network|timed? ?out/i.test(em);
+      var tipE = $('b3AiQuickTip');
+      if (tipE) tipE.textContent = '⚠️ AI 调用失败：' + (isNet ? '网络不通' : em.slice(0, 30));
+      toast('AI 调用失败：' + (isNet ? '网络请求没有到达服务端，请检查网络后重试' : em));
       if (mode === 'random') { try { call('randomBracelet', []); toast('已用本地随缘搭配代替 ✨'); } catch (e2) {} }
     } finally {
       call('hideLoading', []);
@@ -1151,30 +1192,126 @@
   }
   function mmTotal(mm) { return mm >= 10 ? 18 : 22; }
   function hookAi() {
-    if (typeof origAiDesign === 'function') {
+    if (window.__b3AiHookV2) return true;
+    /* bundle.js 是 defer 脚本，本文件却常常先执行完（features.js 动态注入=async）。
+       因此这里不能再假设 window.aiDesign 已经存在：必须轮询等到 bundle 把它挂上
+       全局，再接管。否则 aiDesign/oneClickConfig 一个都接不上，点「智能搭配」
+       就会落到旧实现——旧实现发的是 {mode:'bazi'} 这类载荷，新函数只认
+       mode:'design'，结果就是「点了没反应」或服务端报错。 */
+    if (typeof window.aiDesign !== 'function' || typeof window.oneClickConfig !== 'function') return false;
+    var origAiDesign = window.aiDesign;
+    window.aiDesign = function (mode) {
       /* 三种模式一律走新 birch-ai design；不再把旧地址(如 ai-design)当老路径转发，
          老函数没有 design 模式只会报“缺少问题内容” */
-      window.aiDesign = function (mode) {
-        if (mode === 'bazi' || mode === 'hex' || mode === 'random') return aiDesignNew(mode);
-        return origAiDesign.call(window, mode);
-      };
-    }
+      if (mode === 'bazi' || mode === 'hex' || mode === 'random') return aiDesignNew(mode);
+      return origAiDesign.call(window, mode);
+    };
     /* 接管「智能搭配」按钮：三种模式无条件走新 AI（birch-ai design），
        避免旧逻辑把 mode 直接发给函数导致 chat 分支报“缺少问题内容” */
     var oOneClick = window.oneClickConfig;
-    if (typeof oOneClick === 'function') {
-      window.oneClickConfig = function (mode) {
-        if (mode === 'bazi' || mode === 'hex' || mode === 'random') {
-          try {
-            if (typeof window.aiDesign === 'function') {
-              window.aiDesign(mode);
-              return;
-            }
-          } catch (e) {}
+    window.oneClickConfig = function (mode) {
+      if (mode === 'bazi' || mode === 'hex' || mode === 'random') {
+        try {
+          if (typeof window.aiDesign === 'function') {
+            window.aiDesign(mode);
+            return;
+          }
+        } catch (e) {}
+      }
+      return oOneClick.apply(window, arguments);
+    };
+    window.__b3AiHookV2 = 1;
+    return true;
+  }
+  /* 等 bundle 就绪再接管（最多约 12 秒，留给慢网络/defer 排队） */
+  var __aiHookTries = 0;
+  function bootAiHook() {
+    if (hookAi()) return;
+    if (__aiHookTries++ > 120) return;
+    setTimeout(bootAiHook, 100);
+  }
+
+  /* ============================================================
+   * 后台「AI 设计」→ 补一个「出图 Key（硅基流动）」入口
+   * 原先后台只能填 DeepSeek Key / 函数地址，出图 Key 只在数据库 settings.ai 里，
+   * 面板没入口 → 于是出现「以为已经放好硅基流动 Key，其实后端拿不到」。
+   * 这里写进 app_data/birch_ai_img，后端 birch-ai 会优先用它出图。
+   * ============================================================ */
+  function adminPwdNow() { try { return get('currentAdminPwd') || null; } catch (e) { return null; } }
+
+  function loadAiImgCfg() {
+    var sb = sup(); var pwd = adminPwdNow();
+    if (!sb || !pwd) return;
+    try {
+      sb.rpc('get_app_data', { p_key: 'birch_ai_img', p_pwd: pwd }).then(function (r) {
+        var raw = r && r.data;
+        if (!raw || raw === '[]') return;
+        var o = raw;
+        if (typeof raw === 'string') { try { o = JSON.parse(raw); } catch (e) { o = null; } }
+        if (!o || typeof o !== 'object') return;
+        var st = $('b3ImgKeyStatus');
+        if (st && o.key) st.textContent = '✅ 已就位';
+        var m = $('b3ImgModel'); if (m && o.model) m.value = o.model;
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
+  function saveAiImgCfg() {
+    var el = $('b3ImgKey');
+    if (!el) return;
+    var k = String(el.value || '').trim().replace(/["'\s]/g, '');
+    if (!k) return;                        /* 留空＝沿用，绝不把已存的 Key 抹掉 */
+    var sb = sup();
+    var pwd = adminPwdNow();
+    if (!sb) { toast('出图 Key 保存失败：数据库未就绪'); return; }
+    if (!pwd) { toast('出图 Key 保存失败：管理员密码已过期，请重新登录后台'); return; }
+    var payload = JSON.stringify({
+      key: k,
+      model: (($('b3ImgModel') || {}).value || '').trim() || 'Tongyi-MAI/Z-Image-Turbo',
+      base: 'https://api.siliconflow.cn/v1'
+    });
+    try {
+      sb.rpc('set_app_data', { p_key: 'birch_ai_img', p_data: payload, p_pwd: pwd }).then(function (r) {
+        if (r && (r.error || r.data === false)) {
+          toast('出图 Key 保存失败：' + ((r.error && r.error.message) || '密码无效'));
+          return;
         }
-        return oOneClick.apply(window, arguments);
+        var st = $('b3ImgKeyStatus'); if (st) st.textContent = '✅ 已就位';
+        el.value = '';
+        toast('✅ 出图 Key 已保存（硅基流动）');
+      }).catch(function (e) { toast('出图 Key 保存失败：' + ((e && e.message) || e)); });
+    } catch (e) { toast('出图 Key 保存失败：' + ((e && e.message) || e)); }
+  }
+
+  function ensureAiImgUI() {
+    var keyEl = $('aiKey');
+    if (!keyEl || $('b3ImgKey')) return;
+    var host = null;
+    try { host = keyEl.closest ? keyEl.closest('.form-item') : null; } catch (e) {}
+    if (!host || !host.parentNode) return;
+    var box = document.createElement('div');
+    box.innerHTML =
+      '<div class="form-item" id="b3ImgBlock">' +
+      '<label>🖼️ 出图 Key（硅基流动 SiliconFlow · sk- 开头）</label>' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<input id="b3ImgKey" type="password" autocomplete="new-password" placeholder="在 cloud.siliconflow.cn → API 密钥 创建" style="flex:1;">' +
+      '<span id="b3ImgKeyStatus" style="font-size:11px;white-space:nowrap;color:var(--text-light);"></span></div>' +
+      '<div style="font-size:11px;color:var(--text-light);margin-top:4px;">🔒 保存后不显示明文；留空保存＝沿用现有 Key。' +
+      'AI 定制的水晶效果图由这个 Key 调硅基流动实时生成（1024×1024，不保存图片，约 ¥0.1/张）。</div></div>' +
+      '<div class="form-item" id="b3ImgModelBlock"><label>出图模型</label>' +
+      '<input id="b3ImgModel" value="Tongyi-MAI/Z-Image-Turbo" placeholder="Tongyi-MAI/Z-Image-Turbo / black-forest-labs/FLUX.1-dev"></div>';
+    while (box.firstChild) host.parentNode.insertBefore(box.firstChild, host.nextSibling);
+    /* 跟随原「保存 AI 设置」按钮一起保存出图配置 */
+    var oSave = window.saveAiConfig;
+    if (typeof oSave === 'function' && !window.__b3SaveImgWrapped) {
+      window.__b3SaveImgWrapped = 1;
+      window.saveAiConfig = function () {
+        var ret = oSave.apply(window, arguments);
+        setTimeout(function () { try { saveAiImgCfg(); } catch (e) {} }, 80);
+        return ret;
       };
     }
+    loadAiImgCfg();
   }
 
   /* ============================================================
@@ -1206,10 +1343,22 @@
       if (grid) p.insertBefore(bar, grid); else p.appendChild(bar);
       $('b3AiQuickBtn').onclick = function () {
         var mode = curAIMode();
-        if (!mode) { toast('请先切换到 生辰 / 摇卦 / 随缘 任一模式'); return; }
         var tip = $('b3AiQuickTip');
+        if (!mode) { if (tip) tip.textContent = '请先切换到 生辰 / 摇卦 / 随缘 任一模式'; toast('请先切换到 生辰 / 摇卦 / 随缘 任一模式'); return; }
+        /* 兜底：万一初始化时 bundle 还没就绪（慢网络），这里再抢一次接管 */
+        if (!window.__b3AiHookV2) { try { bootAiHook(); } catch (e) {} }
         if (tip) tip.textContent = '⏳ AI 生成中…（约 1 分钟，请勿关闭页面）';
-        try { window.oneClickConfig(mode); } catch (e) { toast('启动 AI 失败：' + (e && e.message || e)); }
+        try {
+          if (typeof window.oneClickConfig !== 'function') {
+            if (tip) tip.textContent = '⏳ AI 正在准备中…请 2 秒后再点一次';
+            setTimeout(function () { try { bootAiHook(); } catch (e) {} }, 600);
+            return;
+          }
+          window.oneClickConfig(mode);
+        } catch (e) {
+          if (tip) tip.textContent = '⚠️ 启动失败：' + (e && e.message || e);
+          toast('启动 AI 失败：' + (e && e.message || e));
+        }
       };
       var ct = $('b3AiQuickContact');
       if (ct) ct.onclick = function () { try { call('openCustomContact', []); } catch (e) {} };
@@ -1243,9 +1392,10 @@
     try { startTextFix(); } catch (e) {}
     try { initCustomizeQuick(); } catch (e) {}
     try { ensureAdminUI(); } catch (e) {}
+    try { ensureAiImgUI(); } catch (e) {}
     try { watchVerifyResult(); } catch (e) {}
     try { cleanBuy(); } catch (e) {}
-    try { hookAi(); } catch (e) {}
+    try { bootAiHook(); } catch (e) {}
     /* NFC/二维码：复制的是「每码唯一」链接（?c=<官方码>），扫码/打开后自动验证到对应客户 */
     var __b3CopyNfcDone = false;
     if (!__b3CopyNfcDone) {
@@ -1342,6 +1492,7 @@
     if (typeof oOpen === 'function') {
       window.openAdminSection = function (id) {
         if (id === 'secShares') setTimeout(function () { renderSharesAdmin(); }, 60);
+        if (id === 'secAiDesign') setTimeout(function () { try { ensureAiImgUI(); } catch (e) {} }, 80);
         return oOpen.apply(window, arguments);
       };
     }
