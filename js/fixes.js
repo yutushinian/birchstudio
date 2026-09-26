@@ -158,3 +158,299 @@
   // 便利方法：保留原生 fetch 的直通引用，便于日后调试
   window[MARK + '_native'] = nativeFetch;
 })();
+
+/* ============================================================
+ * 桦库 · AI 出图/定制链路修复 patch（v1 / 20260926）
+ * ------------------------------------------------------------
+ * 【修的是什么 bug】
+ *   1) 端点错位：后台 app_data.birch_ai_config.funcUrl 里存的是
+ *      https://<ref>.functions.supabase.co/ai-design，
+ *      而实际部署的 Edge Function 是 <ref>.supabase.co/functions/v1/birch-ai。
+ *      ai-design 根本不存在 → 404。表现为「AI 智能搭配点了没反应/报错」。
+ *   2) 契约错位：bundle.js 的旧 aiDesign 发的是 {mode:'bazi', bazi:{...}}，
+ *      而 birch-ai 只认 mode:'design' + {kind, info, mm}，直接调必然失败。
+ *   3) 出图失败是静默的：旧链路没有任何 img_error 提示，用户只看到「没图」。
+ *
+ * 【策略】
+ *   · 不注入新变量：一律通过 getter 惰性读取（bundle 的 const/let 不会成为
+ *     window 属性，动态脚本里必须用 (0,eval) 才能读到）。
+ *   · 真正的 AI 实现统一交给 js/birch3.js 的 window.__b3AiNew
+ *     （它用 mode:'design' 契约，并渲染效果图 + 失败原因）。
+ *   · birch3 尚未加载完时排队等待（最多 12 秒），不再退回旧 ai-design 链路。
+ *   · 顺带兜底修正后台误存/误点的函数地址，避免下次又写坏。
+ *
+ * 加载：由 index.html 在 js/bundle.js 之后、b3-ai-shim 之前加载。
+ * ============================================================ */
+(function () {
+  'use strict';
+  if (window.__b3AiRoute) return;      // 幂等
+  var MARK = '__b3AiRoute';
+  window[MARK] = 1;
+
+  function globalOf(name) {
+    try { return (0, eval)(name); } catch (e) { return undefined; }
+  }
+  function sbUrl() {
+    var u = globalOf('SUPABASE_URL');
+    return String(u || '').replace(/\/$/, '');
+  }
+  /* 解析规则（务必与 birch3.js 中 __b3AiEndpoint 一致）：
+       1) 后台配置里形如 .../functions/v1/birch-ai 的地址优先；
+       2) 任何指向不存在的 ai-design 的地址一律忽略；
+       3) 兜底用 bundle 里的 SUPABASE_URL 拼出绝对地址。 */
+  function endpoint() {
+    var base = sbUrl();
+    var cfg = globalOf('aiConfig');
+    var cu = cfg && cfg.funcUrl ? String(cfg.funcUrl) : '';
+    if (/^https?:\/\//i.test(cu) && /birch-ai|ai-assistant/i.test(cu) && !/ai-design/i.test(cu)) return cu;
+    return base ? base + '/functions/v1/birch-ai' : '';
+  }
+  window.__b3AiEndpoint = endpoint;
+
+  function toast(msg) {
+    var t = globalOf('toast');
+    if (typeof t === 'function') { try { t(msg); return; } catch (e) {} }
+    if (window.console && console.warn) console.warn('[birch] ' + msg);
+  }
+  function showLoading(msg) {
+    var f = globalOf('showLoading');
+    if (typeof f === 'function') { try { f(msg, 'ai'); } catch (e) {} }
+  }
+  function hideLoading() {
+    var f = globalOf('hideLoading');
+    if (typeof f === 'function') { try { f(); } catch (e) {} }
+  }
+
+  /* 直接按 birch-ai 的 design 契约生成（birch3.js 缺席时的自足兜底） */
+  function directGenerate(mode) {
+    var fu = endpoint();
+    if (!fu) { toast('AI 服务地址未就绪，请刷新页面后重试'); return; }
+    var anon = String(globalOf('SUPABASE_ANON_KEY') || '');
+    var kind = mode === 'hex' ? 'hex' : mode === 'bazi' ? 'bazi' : 'free';
+    var info = {};
+    if (mode === 'bazi') {
+      var lb = globalOf('lastBaziInfo');
+      if (!lb) { toast('请先点击「测算喜用」获得排盘结果'); return; }
+      var val = function (id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
+      var y = val('baziYear');
+      var ZOD = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
+      info = {
+        year: y, month: val('baziMonth'), day: val('baziDay'), hour: val('baziHour'),
+        zod: y ? ZOD[((Number(y) - 4) % 12 + 12) % 12] : ''
+      };
+      if (lb.ganzhi) info.ganzhi = lb.ganzhi;
+      if (lb.dayMaster) info.dayMaster = lb.dayMaster;
+      if (lb.wuxing) info.wuxing = lb.wuxing;
+      if (lb.xiyong) info.el = lb.xiyong;
+    } else if (mode === 'hex') {
+      var lh = globalOf('lastHex');
+      if (!lh || !lh.name) { toast('请先摇卦，再让 AI 分析'); return; }
+      info = { name: lh.name, sym: lh.sym || '', idea: lh.idea || '', wu: lh.wu || '' };
+    } else {
+      info = { note: '自由发挥：请给出一串 3-5 种晶石的整套搭配设计、配色与意象（无生辰信息）' };
+    }
+    var size = globalOf('braceletSize');
+    var mm = Number(size) === 10 ? 10 : 8;
+    showLoading('小桦正在生成 AI 定制方案与效果图\n（约需 1 分钟，请稍候）');
+    fetch(fu, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: anon, Authorization: 'Bearer ' + anon },
+      body: JSON.stringify({ mode: 'design', kind: kind, info: info, mm: mm })
+    }).then(function (res) {
+      return res.text().then(function (t) {
+        var r = null;
+        try { r = JSON.parse(t); } catch (e) { r = null; }
+        if (!res.ok || !r || !r.ok) {
+          toast('AI 服务错误：' + ((r && (r.error || r.raw)) || ('HTTP ' + res.status)));
+          return;
+        }
+        var boxId = mode === 'hex' ? 'aiDesignTop' : mode === 'bazi' ? 'baziResult' : 'aiRandomResult';
+        var box = document.getElementById(boxId);
+        if (box) {
+          box.style.display = 'block';
+          var esc = globalOf('escapeHtml') || function (s) { return String(s == null ? '' : s); };
+          var img = r.url
+            ? '<div class="ai-img-wrap"><img class="ai-img" src="' + esc(r.url) + '" alt="AI 设计图"></div><div class="ai-img-cap">AI 生图预览 · 实物以定制为准</div>'
+            : '<div class="ai-img-warn">⚠️ 方案已生成，但<b>效果图没有出</b>：' + esc(String(r.img_error || '出图服务未返回图片')) + '</div>';
+          box.innerHTML = '<div class="ai-design-box">' +
+            '<div class="ai-title">' + (mode === 'hex' ? '卦象分析' : mode === 'bazi' ? '生辰设计' : '随缘搭配') + '</div>' +
+            '<div class="ai-text">' + esc(String(r.analysis || '')).replace(/\n/g, '<br>') + '</div>' +
+            (r.poem ? '<div class="ai-poem">' + esc(String(r.poem)).replace(/\n/g, '<br>') + '</div>' : '') +
+            img + '</div>';
+        }
+        toast(r.url ? '✅ AI 设计完成，已出图' : '✅ 方案已生成 · ⚠️ 效果图未出');
+      });
+    }).catch(function (e) {
+      toast('AI 调用失败：' + ((e && e.message) || e));
+    }).then(function () { hideLoading(); });
+  }
+
+  function route(mode) {
+    var impl = window.__b3AiNew;
+    if (typeof impl === 'function') { impl(mode); return; }
+    /* 首次点击可能早于 birch3.js 注入完成（features.js 动态插入，最长 12s 兜底）：
+       排队等待，期间只提示一次，绝不再回落到已废弃的 ai-design 链路。 */
+    var tries = 0;
+    toast('正在准备 AI 服务，请稍候…');
+    (function wait() {
+      if (typeof window.__b3AiNew === 'function') { window.__b3AiNew(mode); return; }
+      if (tries++ > 40) { directGenerate(mode); return; }   /* 10s 未就绪 → 自足实现 */
+      setTimeout(wait, 250);
+    })();
+  }
+
+  /* ---- 接管所有「AI 智能搭配」入口 ----
+     三种模式无条件走 birch-ai design；非三种模式原样交回旧实现。 */
+  ['aiDesign', 'oneClickConfig'].forEach(function (name) {
+    var orig = window[name];
+    if (typeof orig !== 'function') return;
+    window[name] = function (mode) {
+      if (mode === 'bazi' || mode === 'hex' || mode === 'random' || mode === 'free') {
+        route(mode);
+        return;
+      }
+      return orig.apply(window, arguments);
+    };
+  });
+  /* 兼容旧版内部调用（maybeAiAnalyze / 其它地方可能直接引用词法名） */
+  window.__b3AiHookV2 = 1;
+
+  /* ---- 兜底：后台若又把函数地址存成不存在的 ai-design，保存时纠正 ---- */  var nativeFetchForRpc = window.fetch;
+  if (typeof nativeFetchForRpc === 'function') {
+    var AI_URL_RE = /^https?:\/\/[a-z0-9-]+\.functions\.supabase\.co\/ai-design\/?$/i;
+    function fixConfigPayload(text) {
+      if (typeof text !== 'string' || text.indexOf('ai-design') === -1) return text;
+      try {
+        var p = JSON.parse(text);
+        if (p && p.p_key === 'birch_ai_config' && typeof p.p_data === 'string') {
+          var cfg = JSON.parse(p.p_data);
+          var fixed = endpoint();
+          if (!cfg.funcUrl || AI_URL_RE.test(String(cfg.funcUrl))) cfg.funcUrl = fixed;
+          if (!cfg.hasKey) cfg.hasKey = true;
+          if (cfg.enabled === undefined) cfg.enabled = true;
+          p.p_data = JSON.stringify(cfg);
+          return JSON.stringify(p);
+        }
+      } catch (e) {}
+      return text;
+    }
+    window.fetch = function (input, init) {
+      try {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        var body = init && init.body;
+        if (url.indexOf('set_app_data') > -1 && typeof body === 'string') {
+          var next = fixConfigPayload(body);
+          if (next !== body) {
+            init = Object.assign({}, init, { body: next });
+            if (window.console && console.info) console.info('[birch] 已纠正后台 AI 函数地址');
+          }
+        }
+      } catch (e) {}
+      return nativeFetchForRpc.apply(this, [input, init]);
+    };
+  }
+})();
+
+/* ============================================================
+ * 桦库 · AI 效果图放大兜底（v1 / 20260926）
+ * ------------------------------------------------------------
+ * 【修的是什么 bug】
+ *   birch3.js 渲染效果图时挂的是 onclick="window.__b3Lightbox('','<url>','AI 设计图')"，
+ *   但 window.__b3Lightbox 从未定义 —— 用户点图没有任何反应（图片下方却写着
+ *   「点击放大」）。实测全局里只有 bundle 的 openLightbox，它要求传对象。
+ *
+ * 【策略】
+ *   1) 定义 window.__b3Lightbox(url, name)：优先转调 bundle 的 openLightbox
+ *      （沿用现有灯箱动效），失败则回退到自建遮罩；
+ *   2) 给所有 .ai-img 补一个委托点击（含旧实现渲染出的图），双击不会有副作用；
+ *   3) 图片加载失败时给出可读提示，而不是留一个碎图标。
+ * ============================================================ */
+(function () {
+  'use strict';
+  if (window.__b3LightboxFallback) return;
+  window.__b3LightboxFallback = 1;
+
+  function openWithBundle(url) {
+    var f = (function () { try { return (0, eval)('openLightbox'); } catch (e) { return undefined; } })();
+    if (typeof f !== 'function') return false;
+    try {
+      /* bundle 的 openLightbox 形态不定，逐种形态试探，全部失败则返回 false */
+      f({ url: url, name: 'AI 设计图', design: '', price: '' });
+      return true;
+    } catch (e) {}
+    try { f(url); return true; } catch (e) {}
+    return false;
+  }
+
+  function fallbackLightbox(url) {
+    var old = document.getElementById('b3LightboxMask');
+    if (old) old.parentNode.removeChild(old);
+    var box = document.createElement('div');
+    box.id = 'b3LightboxMask';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', 'AI 设计图预览');
+    box.style.cssText = 'position:fixed;inset:0;z-index:12900;background:rgba(14,20,17,.92);' +
+      'display:flex;align-items:center;justify-content:center;padding:18px;cursor:zoom-out;' +
+      '-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);';
+    var img = document.createElement('img');
+    img.src = url;
+    img.alt = 'AI 设计图';
+    img.style.cssText = 'max-width:96vw;max-height:88vh;border-radius:16px;' +
+      'box-shadow:0 28px 80px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.12);';
+    var tip = document.createElement('div');
+    tip.textContent = '点击任意处关闭';
+    tip.style.cssText = 'position:absolute;bottom:22px;left:0;right:0;text-align:center;' +
+      'color:rgba(250,248,243,.75);font-size:12.5px;letter-spacing:.1em;';
+    box.appendChild(img);
+    box.appendChild(tip);
+    box.addEventListener('click', function () {
+      if (box.parentNode) box.parentNode.removeChild(box);
+    });
+    document.body.appendChild(box);
+  }
+
+  window.__b3Lightbox = function (_a, url, name) {
+    var u = String(url || _a || '');
+    if (!u) return;
+    if (openWithBundle(u)) return;
+    fallbackLightbox(u);
+  };
+
+  /* 图片加载失败提示（临时地址过期、网络不通时不再只留一个碎图） */
+  function markBroken(img) {
+    if (!img || img.getAttribute('data-b3broken')) return;
+    img.setAttribute('data-b3broken', '1');
+    var cap = img.parentNode && img.parentNode.parentNode
+      ? img.parentNode.parentNode.querySelector('.ai-img-cap') : null;
+    if (cap) cap.textContent = '⚠️ 效果图加载失败（可能是图片地址已过期），可重新生成一次';
+    img.style.display = 'none';
+  }
+
+  function decorate(root) {
+    var nodes = (root || document).querySelectorAll ? (root || document).querySelectorAll('.ai-img') : [];
+    for (var i = 0; i < nodes.length; i++) {
+      var img = nodes[i];
+      if (img.getAttribute('data-b3zoom')) continue;
+      img.setAttribute('data-b3zoom', '1');
+      img.addEventListener('error', function () { markBroken(this); });
+      if (!img.getAttribute('onclick')) {
+        (function (el) {
+          el.addEventListener('click', function () {
+            var u = el.getAttribute('src');
+            if (u) window.__b3Lightbox('', u, 'AI 设计图');
+          });
+        })(img);
+      }
+    }
+  }
+
+  if (document.body) {
+    decorate(document.body);
+    try {
+      new MutationObserver(function () { decorate(document.body); })
+        .observe(document.body, { childList: true, subtree: true });
+    } catch (e) {}
+  } else {
+    document.addEventListener('DOMContentLoaded', function () { decorate(document.body); });
+  }
+})();

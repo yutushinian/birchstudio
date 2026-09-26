@@ -53,6 +53,28 @@
     return u ? u + '/functions/v1/' + name : '';
   }
   function aiEndpoint() { return fnUrl('birch-ai'); }
+
+  /* AI 端点统一解析（与 fixes.js 的 window.__b3AiEndpoint 同规则）：
+     1) 先问 fixes.js 暴露的解析器（它会更正后台配错的地址）；
+     2) 后台配置里必须是绝对地址、且指向 birch-ai / ai-assistant；
+        指向 ai-design 的一律忽略（该函数从未部署，必然 404）；
+     3) 兜底用 bundle 的 SUPABASE_URL 拼绝对地址。 */
+  function resolveAiEndpoint() {
+    try {
+      var shared = get('__b3AiEndpoint');
+      if (typeof shared === 'function') {
+        var u = shared();
+        if (u && /^https?:\/\//i.test(String(u))) return String(u);
+      }
+    } catch (e) {}
+    try {
+      var cfg = get('aiConfig');
+      var cu = cfg && cfg.funcUrl ? String(cfg.funcUrl) : '';
+      if (cu && /^https?:\/\//i.test(cu) && /birch-ai|ai-assistant/i.test(cu) && !/ai-design/i.test(cu)) return cu;
+    } catch (e) {}
+    var fu = aiEndpoint();
+    return /^https?:\/\//i.test(fu) ? fu : '';
+  }
   var CFG_KEY = 'birch_share_discount';
   var LOCAL_KEY = 'birch3_shares_v1';
 
@@ -1030,16 +1052,13 @@
     }
     /* 端点解析：优先用后台配置里指向 birch-ai / ai-assistant 的绝对地址；
        否则回落到由 bundle 全局 SUPABASE_URL 拼出的绝对地址。
-       注意：两个来源都只在「此刻」求值 —— 绝不允许出现相对路径，
-       否则请求会打到静态站自己身上，得到 404 的 HTML 而不是 JSON。 */
-    var fu = '';
-    try {
-      var cfg = get('aiConfig');
-      var cu = cfg && cfg.funcUrl ? String(cfg.funcUrl) : '';
-      if (cu && /^https?:\/\//i.test(cu) && /birch-ai|ai-assistant/i.test(cu)) fu = cu;
-    } catch (e) {}
-    if (!fu) fu = aiEndpoint();
-    if (!/^https?:\/\//i.test(fu)) {
+       注意：
+        · 两个来源都只在「此刻」求值 —— 绝不允许出现相对路径，
+          否则请求会打到静态站自己身上，得到 404 的 HTML 而不是 JSON；
+        · 必须排除 ai-design —— 那是历史遗留的、并未部署的函数名，
+          后台配置里若还存着它，会稳定 404（这是「AI 出图/智能搭配」失效的主因）。 */
+    var fu = resolveAiEndpoint();
+    if (!fu) {
       var tipNo = $('b3AiQuickTip');
       if (tipNo) tipNo.textContent = '⚠️ AI 服务地址未就绪，请刷新页面后重试';
       toast('AI 服务地址未就绪：请刷新页面后重试；若仍不行请到后台「AI 智能设计」检查函数地址');
@@ -1192,6 +1211,10 @@
   }
   function mmTotal(mm) { return mm >= 10 ? 18 : 22; }
   function hookAi() {
+    /* 无论是否已经有人接管入口，都要把「真正的实现」挂出去：
+       fixes.js / 内联 shim 会抢先把 __b3AiHookV2 置 1（它们只管入口转发），
+       若在下面才导出，就会因为提前 return 而永远不导出。 */
+    window.__b3AiNew = aiDesignNew;
     if (window.__b3AiHookV2) return true;
     /* bundle.js 是 defer 脚本，本文件却常常先执行完（features.js 动态注入=async）。
        因此这里不能再假设 window.aiDesign 已经存在：必须轮询等到 bundle 把它挂上

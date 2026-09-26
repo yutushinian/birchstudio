@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="version" content="v8.58-perf">
+  <meta name="version" content="v8.60-ai-fix">
   <title>白桦官方网站</title>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -1314,16 +1314,24 @@
           <div
             style="background:#f6fbf8;border:1px dashed var(--border-green);border-radius:12px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--text-dark);line-height:1.9;">
             <b>📋 第一步：部署转发服务（约 3 分钟）</b><br> 1. 打开 Supabase 控制台 → 你的项目 → 左侧「Edge Functions」→ Deploy a new function<br> 2. 函数名填 <code
-              style="background:#eaf4ee;padding:1px 6px;border-radius:6px;">ai-design</code>，把「ai-design/index.ts」文件内容全部粘贴进去<br> 3. 点 Deploy，记下函数地址：<code
-              style="background:#eaf4ee;padding:1px 6px;border-radius:6px;">https://cplyzukenqxdwhfivlqx.functions.supabase.co/ai-design</code><br> （详细步骤见
-            ai-design/部署说明.md）
+              style="background:#eaf4ee;padding:1px 6px;border-radius:6px;">birch-ai</code>，把仓库内「supabase/functions/birch-ai/index.ts」的内容全部粘贴进去<br> 3. 点 Deploy，函数地址就是：<code
+              style="background:#eaf4ee;padding:1px 6px;border-radius:6px;">https://cplyzukenqxdwhfivlqx.supabase.co/functions/v1/birch-ai</code>
+            <br><span style="color:#8a5a2b;">⚠️ 注意：地址必须带 <b>/functions/v1/</b>，且函数名是 <b>birch-ai</b>；历史遗留的
+              <code style="background:#fdeedd;padding:1px 5px;border-radius:5px;">ai-design</code> 函数并未部署，填它会直接 404（AI 出图失败的主因）。</span>
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
             <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text-dark);cursor:pointer;"><input type="checkbox" id="aiEnabled"
                 style="width:18px;height:18px;accent-color:var(--green-main);"> 启用 AI 设计</label>
           </div>
-          <div class="form-item"><label>函数地址（Edge Function URL）</label><input id="aiFuncUrl"
-              placeholder="https://cplyzukenqxdwhfivlqx.functions.supabase.co/ai-design"></div>
+          <div class="form-item"><label>函数地址（Edge Function URL）</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input id="aiFuncUrl" style="flex:1;"
+                placeholder="https://cplyzukenqxdwhfivlqx.supabase.co/functions/v1/birch-ai">
+              <button type="button" class="btn-light" style="flex:0 0 auto;white-space:nowrap;padding:11px 12px;border-radius:12px;font-size:12.5px;"
+                onclick="(function(){var i=document.getElementById('aiFuncUrl');if(!i)return;i.value='https://cplyzukenqxdwhfivlqx.supabase.co/functions/v1/birch-ai';(window.toast||function(){})('已填入正确函数地址，记得点保存');})()">填入正确地址</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:4px;">必须形如 …supabase.co/functions/v1/birch-ai；若填成 …functions.supabase.co/ai-design 会 404，AI 出图与智能搭配都会失败。</div>
+          </div>
           <div class="form-item"><label>DeepSeek API Key（sk- 开头）</label>
             <div style="display:flex;align-items:center;gap:8px;">
               <input id="aiKey" type="password" placeholder="在 platform.deepseek.com 的 API Keys 创建" style="flex:1;" autocomplete="new-password">
@@ -2089,8 +2097,9 @@
   
   
 <script src="js/bundle.js" defer></script>
-<!-- 邮件收件人修复：客户通知改投客户邮箱（详见 js/fixes.js 头部说明） -->
-<script defer src="js/fixes.js?v=20260916"></script>
+<!-- 邮件收件人修复 + AI 链路修复（端点路由/旧 ai-design 兜底/后台地址纠正）
+     详见 js/fixes.js 头部说明 -->
+<script defer src="js/fixes.js?v=20260926"></script>
 <script src="js/features.js?v=20260922a"></script><script>
 /* b3-ai-shim 20260922a */
 (function(){
@@ -2141,32 +2150,57 @@ var cq=g("consumeAiQuota");if(typeof cq==="function"){try{cq();}catch(e){}}
 }catch(e){toast("AI 调用失败："+((e&&e.message)||e));if(mode==="random"){var rb2=g("randomBracelet");if(typeof rb2==="function"){try{rb2();toast("已用本地随缘搭配代替 ✨");}catch(e2){}}}}
 finally{var hl=g("hideLoading");if(typeof hl==="function"){try{hl();}catch(e){}}}
 }
-/* ★ 安装时机：本段是内联脚本，解析期就执行；而 js/bundle.js 带 defer，
-   要到整篇文档解析完才跑。bundle 顶层那两个 function aiDesign / function
-   oneClickConfig 声明会直接覆盖这里写下的 window.aiDesign / window.oneClickConfig
-   —— 所以过去这段 shim 从未真正生效（AI 定制因此失真）。
-   现在改为：等 bundle 就绪（window.oneClickConfig 出现）后再安装；
-   若 birch3.js 已接管（window.__b3AiHookV2），本段整体让位，
-   只在 birch3.js 加载失败时充当兜底。 */
+/* ★ 安装时机与优先级（20260926 修）
+   本段是内联脚本，解析期就执行；而 bundle.js 带 defer，要到整篇文档解析完才跑。
+   现在链路已经统一，本段只做「最后一层兜底」，不重复实现 AI 逻辑：
+     1) js/fixes.js（紧随 bundle 之后）会把 window.aiDesign / oneClickConfig
+        接到 window.__b3AiNew，并置 window.__b3AiHookV2 = 1；
+     2) js/birch3.js 注入完成后暴露 window.__b3AiNew（真正实现）；
+     3) 本段负责：等 __b3AiNew 就绪就转发过去（避免用户抢跑点击），
+        只有在 10 秒内仍然没有 __b3AiNew（例如 birch3.js 加载失败）时，
+        才启用下面自带的最小实现 aiNew。
+   —— 过去这段 shim 因为安装时机不对从未生效，且载荷契约与后端不符，
+      那次失败正是「AI 出图不出图」的历史原因之一。 */
+function b3HasNew(){return typeof window.__b3AiNew==="function";}
+function b3Route(mode){
+  if(b3HasNew()){window.__b3AiNew(mode);return true;}
+  return false;
+}
 function b3Install(){
-  if(window.__b3AiHookV2)return true;      /* birch3 已接管，让位 */
+  if(window.__b3AiHook)return true;        /* 已安装过 */
   if(typeof window.oneClickConfig!=="function"||typeof window.aiDesign!=="function")return false;
   var orig=window.aiDesign;
-  window.aiDesign=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){aiNew(mode);}else if(typeof orig==="function"){orig(mode);}};
+  window.aiDesign=function(mode){
+    if(mode==="bazi"||mode==="hex"||mode==="random"||mode==="free"){
+      if(b3Route(mode))return;
+      var t=0;
+      (function wait(){
+        if(b3Route(mode))return;
+        if(t++>40){aiNew(mode);return;}      /* 10 秒兜底：本段自带实现 */
+        setTimeout(wait,250);
+      })();
+      return;
+    }
+    if(typeof orig==="function")return orig.apply(window,arguments);
+  };
   var oc=window.oneClickConfig;
-  window.oneClickConfig=function(mode){if(mode==="bazi"||mode==="hex"||mode==="random"){window.aiDesign(mode);}else{oc(mode);}};
-  window.__b3AiHook=1;window.__b3v="20260922a";
+  window.oneClickConfig=function(mode){
+    if(mode==="bazi"||mode==="hex"||mode==="random"||mode==="free"){window.aiDesign(mode);return;}
+    return oc.apply(window,arguments);
+  };
+  window.__b3AiHook=1;window.__b3v="20260926";
   return true;
 }
 var b3w=0;
 function b3Boot(){
+  if(window.__b3AiHook)return;
   if(b3Install())return;
   if(b3w++>120)return;
   setTimeout(b3Boot,100);
 }
-/* 延后 900ms：把优先权让给 birch3.js（它在 DOMContentLoaded 时接管） */
-if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",function(){setTimeout(b3Boot,900);});}
-else{setTimeout(b3Boot,900);}
+/* DOMContentLoaded 后立即尝试（bundle.js/fixes.js 都是 defer，此时已就绪） */
+if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",function(){setTimeout(b3Boot,0);});}
+else{setTimeout(b3Boot,0);}
 })();
 </script><script src="js/motion.js?v=20260916b"></script><script src="js/theme.js?v=20260918a" defer></script></body>
 

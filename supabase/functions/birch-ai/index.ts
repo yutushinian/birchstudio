@@ -59,6 +59,19 @@ async function recordUsage(SB_URL, SK, mode, question) {
   } catch (e) { /* 表未建则忽略 */ }
 }
 
+async function getDbAiImg(SB_URL, SK) {
+  try {
+    const r = await fetch(SB_URL + "/rest/v1/app_data?select=data&key=eq.birch_ai_img", {
+      headers: { apikey: SK, Authorization: "Bearer " + SK },
+    });
+    if (!r.ok) return null;
+    const rows = await r.json();
+    const v = rows && rows[0] && rows[0].data;
+    if (!v) return null;
+    return typeof v === "string" ? JSON.parse(v) : v;
+  } catch (_) { return null; }
+}
+
 async function fetchCrystals(SB_URL, SK) {
   try {
     const r = await fetch(SB_URL + "/rest/v1/crystals?select=name,kind,element,meaning&visible=eq.true&order=sort.asc&limit=100", {
@@ -66,6 +79,120 @@ async function fetchCrystals(SB_URL, SK) {
     });
     return r.ok ? await r.json() : [];
   } catch (_) { return []; }
+}
+
+/* ============================================================
+ * 出图工具（2026-09-26 修复）
+ * 1) fetchT：给每一次上游请求加超时，避免出图卡死把整个函数拖到网关超时；
+ * 2) ensureBucket + uploadImage：把 b64 结果落到 Storage 永久地址，
+ *    不再直接把硅基流动的临时签名 URL（24h 过期）返回给前端 —— 这正是
+ *    「AI 出图时好时坏 / 图过一阵就裂」的根因（线上 storage.buckets 为空）。
+ * ============================================================ */
+const IMG_BUCKET = "assets";
+
+async function fetchT(url, init, ms) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => { try { ac.abort(); } catch (_) {} }, ms || 90000);
+  try {
+    return await fetch(url, { ...(init || {}), signal: ac.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function ensureBucket(SB_URL, SK) {
+  if (!SB_URL || !SK) return false;
+  try {
+    const chk = await fetchT(SB_URL + "/storage/v1/bucket/" + IMG_BUCKET, {
+      headers: { apikey: SK, Authorization: "Bearer " + SK },
+    }, 15000);
+    if (chk.ok) return true;
+    const mk = await fetchT(SB_URL + "/storage/v1/bucket", {
+      method: "POST",
+      headers: { apikey: SK, Authorization: "Bearer " + SK, "Content-Type": "application/json" },
+      body: JSON.stringify({ id: IMG_BUCKET, name: IMG_BUCKET, public: true, file_size_limit: 10485760 }),
+    }, 15000);
+    if (mk.ok) return true;
+    /* 并发场景下别的实例已经建好了：再查一次 */
+    const again = await fetchT(SB_URL + "/storage/v1/bucket/" + IMG_BUCKET, {
+      headers: { apikey: SK, Authorization: "Bearer " + SK },
+    }, 15000);
+    return again.ok;
+  } catch (_) { return false; }
+}
+
+function b64ToBytes(b64) {
+  const bin = atob(String(b64));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+/* 上传成功返回永久公开地址；失败返回空串（调用方回退临时地址 / b64） */
+async function uploadImage(SB_URL, SK, b64) {
+  if (!SB_URL || !SK || !b64) return "";
+  try {
+    await ensureBucket(SB_URL, SK);
+    const path = "gen/" + Date.now() + "-" + Math.floor(Math.random() * 1e6) + ".png";
+    const up = await fetchT(SB_URL + "/storage/v1/object/" + IMG_BUCKET + "/" + path, {
+      method: "POST",
+      headers: { apikey: SK, Authorization: "Bearer " + SK, "Content-Type": "image/png", "x-upsert": "true" },
+      body: b64ToBytes(b64),
+    }, 60000);
+    if (!up.ok) return "";
+    return SB_URL + "/storage/v1/object/public/" + IMG_BUCKET + "/" + path;
+  } catch (_) { return ""; }
+}
+
+function errText(j, status) {
+  if (!j) return "HTTP " + status;
+  return String(
+    (j.message) ||
+    (j.error && (j.error.message || JSON.stringify(j.error))) ||
+    (j.raw) ||
+    ("HTTP " + status)
+  ).slice(0, 300);
+}
+
+/* 上游只给临时 URL 时，第一时间抓回来转存（签名地址 24 小时后即失效） */
+async function fetchAndStore(SB_URL, SK, remoteUrl) {
+  if (!remoteUrl) return "";
+  try {
+    const r = await fetchT(remoteUrl, {}, 60000);
+    if (!r.ok) return "";
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (!buf.length || buf.length > 10485760) return "";
+    let bin = "";
+    for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+    const stored = await uploadImage(SB_URL, SK, btoa(bin));
+    return stored || "";
+  } catch (_) { return ""; }
+}
+
+/* 硅基流动出图：超时 + 一次重试（5xx/网络抖动重试，4xx 直接给出原因） */
+async function siliconGenerate(imgKey, imgBase, imgModel, prompt) {
+  const url = String(imgBase || "https://api.siliconflow.cn/v1").replace(/\/$/, "") + "/images/generations";
+  let lastErr = "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await fetchT(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + imgKey },
+        body: JSON.stringify({ model: imgModel, prompt: prompt, image_size: "1024x1024", batch_size: 1, num_images: 1, response_format: "b64_json" }),
+      }, 100000);
+      const j = await r.json().catch(() => null);
+      if (r.ok && j && j.data && j.data[0]) {
+        const d0 = j.data[0];
+        return { b64: d0.b64_json || "", url: d0.url || "", error: "" };
+      }
+      lastErr = errText(j, r.status);
+      if (r.status >= 400 && r.status < 500) break; /* 参数/额度/密钥问题，重试无意义 */
+    } catch (e) {
+      lastErr = (e && e.name === "AbortError") ? "出图超时（上游 100 秒无响应）" : String((e && e.message) || e);
+    }
+    await new Promise((res) => setTimeout(res, 800));
+  }
+  return { b64: "", url: "", error: lastErr || "出图服务未返回图片" };
 }
 
 const SYSTEM = [
@@ -145,10 +272,10 @@ Deno.serve(async (req) => {
         "用户信息：" + userInfo
       ].join(NL);
 
-      const pa2 = await fetch("https://api.deepseek.com/chat/completions", {
+      const pa2 = await fetchT("https://api.deepseek.com/chat/completions", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + dk2 },
         body: JSON.stringify({ model: dmodel2, messages: [{ role: "system", content: sysP2 }], temperature: 0.7, max_tokens: 3200, thinking: { type: "disabled" } })
-      }).then(r => r.json()).catch(() => null);
+      }, 90000).then(r => r.json()).catch(() => null);
       const rawTxt = pa2 && pa2.choices && pa2.choices[0] && pa2.choices[0].message
         ? String((pa2.choices[0].message.content || pa2.choices[0].message.reasoning_content) || "").split("*").join("").trim()
         : "";
@@ -191,8 +318,11 @@ Deno.serve(async (req) => {
       let poem = "";
       let poemAt = rawTxt.search(/诗\s*[曰：:]/);
       if (poemAt > -1) {
-        const poemRaw = rawTxt.slice(poemAt).replace(/^[^\n]*?诗\s*[曰：:]\s*/, "");
-        const pl = poemRaw.split(NL).map(function (t) { return t.replace(/^\s*(?:\d+[.)、]\s*)/, "").trim(); }).filter(Boolean).slice(0, 4);
+        const poemRaw = rawTxt.slice(poemAt).replace(/^[^\n]*诗\s*[曰：:]?[：:]?\s*/, "");
+        const pl = poemRaw.split(NL)
+          .map(function (t) { return t.replace(/^\s*(?:\d+[.)、]\s*)/, "").trim(); })
+          .filter(function (t) { return t && !/^[\s：:，,。.、；;！!？?‘’“”'"「」『』\-—·]+$/.test(t); })
+          .slice(0, 4);
         if (pl.length >= 2) poem = pl.join(NL);
       }
       if (!poem) {
@@ -230,39 +360,42 @@ Deno.serve(async (req) => {
       if (!analysis) analysis = "白桦定制：依五行与季节意象取平衡搭配（详见最终设计）";
 
       // ---- 通义（硅基流动 Z-Image）严格按串序出图 ----
-      const imgKey2 = dbAi2.img_key || Deno.env.get("SILICON_KEY") || "";
-      const imgBase2 = dbAi2.img_base || "https://api.siliconflow.cn/v1";
-      const imgModel2 = dbAi2.img_model || "Tongyi-MAI/Z-Image-Turbo";
+      const imgCfg2 = await getDbAiImg(SB_URL, SK) || {};
+      const imgKey2 = dbAi2.img_key || imgCfg2.key || Deno.env.get("SILICON_KEY") || "";
+      const imgBase2 = dbAi2.img_base || imgCfg2.base || "https://api.siliconflow.cn/v1";
+      const imgModel2 = dbAi2.img_model || imgCfg2.model || "Tongyi-MAI/Z-Image-Turbo";
       let url = "";
-      if (imgKey2) {
+      let imgError = "";
+      if (!imgKey2) {
+        /* 出图失败不再静默：以前前端只看到「没有图」，无从判断是密钥、额度还是网络 */
+        imgError = "出图密钥未配置：请在后台「AI 智能设计」填写出图 Key（img_key），或设置 Supabase Secret SILICON_KEY";
+      } else {
         const colorOf = {};
         stones.forEach(function (st) { if (st.color) colorOf[st.name] = st.color; });
         const seqDesc = seq.map(function (n) { return n + (colorOf[n] ? "(" + colorOf[n] + ")" : ""); }).join(" -> ");
         const promptTxt2 = "High-end luxury jewelry brand editorial product photograph of a real polished crystal bead bracelet with EXACTLY " + count + " round beads, every bead EXACTLY " + mm + "mm in diameter, all beads the same size, forming one neat closed ring. Beads arranged strictly in this clockwise order from the top: " + seqDesc + ". Photoreal AA-grade natural crystals with inner texture and soft sparkle (not illustration), elegant high-end jewelry campaign lighting, deep navy-to-black gradient studio background with soft golden rim light, crisp macro focus, no text, no watermark, 4k.";
-        const ir2 = await fetch(imgBase2.replace(/\/$/, "") + "/images/generations", {
-          method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + imgKey2 },
-          body: JSON.stringify({ model: imgModel2, prompt: promptTxt2, image_size: "1024x1024", num_images: 1 })
-        });
-        const ij2 = await ir2.json().catch(() => null);
-        if (ir2.ok && ij2 && ij2.data && ij2.data[0]) {
-          const b64b = ij2.data[0].b64_json || "";
-          if (b64b) {
-            const ts = Date.now();
-            const path = "gen/" + ts + "-" + Math.floor(Math.random() * 1e6) + ".png";
-            try {
-              const bytes = Uint8Array.from(atob(b64b), function (c) { return c.charCodeAt(0); });
-              const up = await fetch(SB_URL + "/storage/v1/object/assets/" + path, {
-                method: "POST", headers: { apikey: SK, Authorization: "Bearer " + SK, "Content-Type": "image/png" }, body: bytes
-              });
-              if (up.ok) url = SB_URL + "/storage/v1/object/public/assets/" + path;
-            } catch (e) {}
-            if (!url) url = "data:image/png;base64," + b64b;
-          } else if (ij2.data[0].url) url = ij2.data[0].url;
+        const gen2 = await siliconGenerate(imgKey2, imgBase2, imgModel2, promptTxt2);
+        if (gen2.error) {
+          imgError = gen2.error;
+        } else if (gen2.b64) {
+          url = await uploadImage(SB_URL, SK, gen2.b64);
+          if (!url) {
+            url = "data:image/png;base64," + gen2.b64;
+            imgError = "Storage 上传未成功（assets 桶或权限问题），本次使用内嵌图片，刷新后可能不再显示";
+          }
+        } else if (gen2.url) {
+          url = await fetchAndStore(SB_URL, SK, gen2.url);
+          if (!url) {
+            url = gen2.url;
+            imgError = "图片转存未成功，当前为 24 小时有效的临时地址，请检查 assets 存储桶";
+          }
+        } else {
+          imgError = "出图服务未返回图片";
         }
       }
       await recordUsage(SB_URL, SK, 'design', (info.zod || info.sun || info.name || "design"));
       // 返回：分析=设计理念，poem=诗曰；配比/串序(stones/seq)仅供后台与出图用
-      return Response.json({ ok: true, analysis: analysis, poem: poem, stones: stones, seq: seq, url: url, mm: mm, count: count }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return Response.json({ ok: true, analysis: analysis, poem: poem, stones: stones, seq: seq, url: url, img_error: imgError, mm: mm, count: count }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (mode === "product_img") {
@@ -280,7 +413,7 @@ Deno.serve(async (req) => {
         const ctx = bz ? ("生辰：" + bz.year + "年" + bz.month + "月" + bz.day + "日" + (bz.hour || "?") + "时，生肖" + (bz.zod || "") + "，本命" + (bz.el || "") + (bz.gua ? "，另取卦" + bz.gua : "")) : ("卦：" + hx.name + "（" + hx.sym + "），" + (hx.idea || "") + "，五行属" + (hx.wu || "")) + "；成串规格：整串统一 " + (d.mm || 10) + "mm，共 " + (d.mm >= 10 ? 18 : 22) + " 颗同径圆珠";
         const sysP = ['你是白桦的设计师与文案：根据给定的生辰八字或卦象，为一串定制水晶手串写一段有东方韵味的完整分析文案。整串珠径已定（见信息），所有珠子同径同颗数，只需决定配色与石种（可3-5种颜色与晶石，不必只有两种）。不要用任何 * 星号、不用 markdown 标记。请按以下段落输出：', '第一段：以命局/卦意开篇（如：串为XX日主、XX月XX之命，量身定制……），结合季节调候、五行生克谈喜忌走向（字数约90-130字）。', '第二段：逐石点题：按上述走向挑选 3-5 种晶石与颜色，每种一两句诗意理由（如：取XX之XX色，润秋燥而不寒……），并交代整串是统一 8mm 或 10mm 的 22/18 颗同径珠。', '第三段：缀饰与整体意象（垫片/工艺/整体色感，2-3句，如：全串清而不冽，暖而不燥……）。', '最后：以四句诗收尾（每行一句诗，共四句）。', '整体约250-380字，优美克制，勿出现任何平台名。', '信息：' + ctx].join('');
         try {
-          const pa = await fetch("https://api.deepseek.com/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + dk }, body: JSON.stringify({ model: dmodel, messages: [{ role: "system", content: sysP }], temperature: 0.7, max_tokens: 700 }) }).then(r=>r.json()).catch(()=>null);
+          const pa = await fetchT("https://api.deepseek.com/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + dk }, body: JSON.stringify({ model: dmodel, messages: [{ role: "system", content: sysP }], temperature: 0.7, max_tokens: 700 }) }, 90000).then(r=>r.json()).catch(()=>null);
           if (pa && pa.choices && pa.choices[0]) analysis = String((pa.choices[0].message && (pa.choices[0].message.content || pa.choices[0].message.reasoning_content)) || "").split("*").join("").trim();
           const hm = String(analysis).match(/#[0-9a-fA-F]{6}/g);
           if (hm) extraHexes = hm.slice(0, 4);
@@ -302,47 +435,27 @@ Deno.serve(async (req) => {
       ].join("\n");
       const styleSys = "You write concise English e-commerce product-photo prompts for real crystal bead bracelets. Output ONLY the prompt, no preamble.";
       const styleUser = "Design:\n" + designLine + "\n\nWrite one refined English prompt (under 150 words) for a high-end luxury jewelry brand editorial product photograph of the bracelet: real polished translucent crystal beads in the exact multi-tone palette specified by the design (main tone dominant, 1-3 accent tones strictly per the listed hex colors), beautiful natural inner texture and soft sparkle (photoreal, absolutely not illustration), beads arranged in an elegant neat ring, on a deep navy-to-black gradient studio background with soft umbrella lighting and a subtle warm golden accent, crisp macro focus, premium minimal composition like a flagship jewelry e-commerce hero image, no text, no watermark, no props, 4k.";
-      const pr1 = await fetch("https://api.deepseek.com/chat/completions", {
+      const pr1 = await fetchT("https://api.deepseek.com/chat/completions", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + dk },
         body: JSON.stringify({ model: dmodel, messages: [{ role: "system", content: styleSys }, { role: "user", content: styleUser }], temperature: 0.7, max_tokens: 400 })
-      }).then(r => r.json()).catch(() => null);
+      }, 90000).then(r => r.json()).catch(() => null);
       if (!pr1 || !pr1.choices || !pr1.choices[0]) return Response.json({ ok: false, error: "DeepSeek 提示词生成失败" }, { headers: corsHeaders });
       const promptTxt = String((pr1.choices[0].message && (pr1.choices[0].message.content || pr1.choices[0].message.reasoning_content)) || "").trim();
-      const imgKey = dbAi.img_key || Deno.env.get("SILICON_KEY") || "";
-      const imgBase = dbAi.img_base || "https://api.siliconflow.cn/v1";
-      const imgModel = dbAi.img_model || "black-forest-labs/FLUX.1-dev";
-      if (!imgKey) return Response.json({ ok: false, error: "硅基流动出图密钥未配置：请到后台 AI 设计填 img_key" }, { headers: corsHeaders });
-      const ir = await fetch(imgBase.replace(/\/$/, "") + "/images/generations", {
-        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + imgKey },
-        body: JSON.stringify({ model: imgModel, prompt: promptTxt, image_size: "1024x1024", num_images: 1 })
-      });
-      const ij = await ir.json().catch(() => null);
-      if (!ir.ok || !ij || !ij.data || !ij.data[0]) {
-        return Response.json({ ok: false, error: "出图失败：" + String((ij && (ij.message || (ij.error && (ij.error.message || JSON.stringify(ij.error))))) || ir.status) }, { headers: corsHeaders });
+      const imgCfg = await getDbAiImg(SB_URL, SK) || {};
+      const imgKey = dbAi.img_key || imgCfg.key || Deno.env.get("SILICON_KEY") || "";
+      const imgBase = dbAi.img_base || imgCfg.base || "https://api.siliconflow.cn/v1";
+      const imgModel = dbAi.img_model || imgCfg.model || "Tongyi-MAI/Z-Image-Turbo";
+      if (!imgKey) return Response.json({ ok: false, error: "出图密钥未配置：请到后台「AI 智能设计」填 img_key，或设置 Supabase Secret SILICON_KEY" }, { headers: corsHeaders });
+      const gen = await siliconGenerate(imgKey, imgBase, imgModel, promptTxt);
+      if (gen.error) {
+        return Response.json({ ok: false, error: "出图失败：" + gen.error }, { headers: corsHeaders });
       }
-      const b64 = ij.data[0].b64_json || "";
-      const remoteUrl = ij.data[0].url || "";
-      if (!b64 && remoteUrl) return Response.json({ ok: true, url: remoteUrl, b64: "" }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      let url = "";
-      if (b64) {
-        const ts = Date.now();
-        const path = "gen/" + ts + "-" + Math.floor(Math.random() * 1e6) + ".png";
-        try {
-          try { await fetch(SB_URL + "/storage/v1/bucket/assets", { method: "GET", headers: { apikey: SK, Authorization: "Bearer " + SK } }); }
-          catch (e) {}
-          const chk = await fetch(SB_URL + "/storage/v1/bucket/assets", { headers: { apikey: SK, Authorization: "Bearer " + SK } });
-          if (chk.status === 404 || chk.status === 400) {
-            await fetch(SB_URL + "/storage/v1/bucket", { method: "POST", headers: { apikey: SK, Authorization: "Bearer " + SK, "Content-Type": "application/json" }, body: JSON.stringify({ id: "assets", name: "assets", public: true }) }).catch(() => {});
-          }
-          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-          const up = await fetch(SB_URL + "/storage/v1/object/assets/" + path, {
-            method: "POST", headers: { apikey: SK, Authorization: "Bearer " + SK, "Content-Type": "image/png" }, body: bytes
-          });
-          if (up.ok) url = SB_URL + "/storage/v1/object/public/assets/" + path;
-        } catch (e) { /* 回退 b64 */ }
-      }
+      // 优先永久存储 → 临时地址 → b64 回退
+      let url = await uploadImage(SB_URL, SK, gen.b64);
+      if (!url && gen.url) url = await fetchAndStore(SB_URL, SK, gen.url);
+      const remoteUrl = url ? "" : (gen.url || "");
       await recordUsage(SB_URL, SK, 'product_img', String(d.name || ''));
-      return Response.json({ ok: true, url: url, b64: url ? "" : b64, analysis: analysis, colors: extraHexes }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return Response.json({ ok: true, url: url || remoteUrl, b64: (url || remoteUrl) ? "" : gen.b64, analysis: analysis, colors: extraHexes }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const question = String(body.question || "").trim();
     if (!question) return Response.json({ ok: false, error: "缺少问题内容" }, { headers: corsHeaders });
