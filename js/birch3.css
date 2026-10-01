@@ -1,0 +1,428 @@
+/* ============================================================
+   桦库 birch3 · 客户分享/弹幕/审核 UI 样式（运行时注入）
+   风格对齐原站：米白 + 松绿 + 桦金
+   ============================================================ */
+
+/* ---- 浮动入口 ---- */
+.b3-fab{
+  position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));
+  z-index:12080;display:flex;align-items:center;gap:6px;
+  background:linear-gradient(135deg,#eaf5ee,#d8ead9);
+  border:1px solid rgba(74,124,89,.45);color:#2f5c40;
+  border-radius:999px;padding:9px 14px;font-size:12.5px;font-weight:600;
+  box-shadow:0 8px 22px rgba(47,92,64,.22);cursor:pointer;letter-spacing:.04em;
+  transition:transform .25s var(--spring, cubic-bezier(.34,1.56,.64,1));
+}
+.b3-fab:hover{transform:translateY(-2px)}
+.b3-fab:active{transform:scale(.95)}
+.b3-fab .b3-fab-dot{width:7px;height:7px;border-radius:50%;background:#5aa87a;animation:b3blink 1.6s infinite}
+@keyframes b3blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ---- 通用遮罩/弹层（与全站 modal.show 分离，独立自洽） ---- */
+.b3-mask{position:fixed;inset:0;background:rgba(24,32,22,.55);backdrop-filter:blur(3px);
+  z-index:13000;opacity:0;pointer-events:none;transition:opacity .28s}
+.b3-mask.show{opacity:1;pointer-events:auto}
+.b3-panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);
+  width:min(680px,94vw);max-height:88vh;overflow:hidden;border-radius:20px;z-index:13010;
+  background:linear-gradient(165deg,#fdfcf8,#f3efe3);border:1px solid rgba(201,169,110,.5);
+  box-shadow:0 30px 80px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.5) inset;
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .3s var(--spring, cubic-bezier(.34,1.56,.64,1));
+  display:flex;flex-direction:column;color:var(--text-dark,#3d3229);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.b3-panel.show{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.b3-panel.b3-wall-panel{max-width:none;width:min(900px,96vw)}
+.b3-head{display:flex;align-items:center;gap:10px;padding:14px 18px 10px;border-bottom:1px dashed rgba(74,124,89,.35)}
+.b3-head h3{margin:0;font-size:17px;color:#2f5c40;letter-spacing:.08em;flex:1}
+.b3-close{width:32px;height:32px;border-radius:50%;border:1px solid rgba(74,124,89,.4);background:#fff;color:#4a7c59;font-size:16px;cursor:pointer;line-height:1;flex:0 0 auto}
+.b3-close:hover{background:#eef7f0}
+.b3-body{padding:14px 18px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
+
+/* ---- 弹幕舞台（分享墙顶部） ---- */
+.b3-dm-stage{position:relative;height:190px;border-radius:14px;overflow:hidden;flex:0 0 auto;
+  background:
+    radial-gradient(120% 140% at 80% 0%, rgba(201,169,110,.28), transparent 55%),
+    radial-gradient(120% 120% at 10% 100%, rgba(74,124,89,.34), transparent 60%),
+    linear-gradient(160deg,#1c2a22,#24382c);
+  margin-bottom:14px}
+.b3-dm-hint{position:absolute;left:16px;top:10px;font-size:11px;color:#c9d8c2;letter-spacing:.18em;z-index:2;
+  background:rgba(0,0,0,.25);padding:4px 10px;border-radius:999px;border:1px solid rgba(201,169,110,.4)}
+.b3-dm-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.b3-dm-bullet{position:absolute;white-space:nowrap;font-size:14.5px;color:#f7efdd;
+  text-shadow:0 1px 3px rgba(0,0,0,.7);font-weight:600;will-change:transform;
+  animation:b3fly linear forwards;letter-spacing:.02em}
+.b3-dm-bullet b{color:#f5c869;font-weight:700}
+.b3-dm-bullet.b3-dm-1{color:#fff6e2}.b3-dm-bullet.b3-dm-2{color:#e4f2e6}.b3-dm-bullet.b3-dm-3{color:#ffe3c2}
+@keyframes b3fly{from{transform:translateX(100vw)}to{transform:translateX(-130%)}}
+
+/* ---- 分享卡片墙 ---- */
+.b3-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
+.b3-card{background:rgba(255,255,255,.85);border:1px solid rgba(74,124,89,.28);border-radius:14px;overflow:hidden;
+  cursor:pointer;transition:transform .3s var(--spring, cubic-bezier(.34,1.56,.64,1)),box-shadow .3s;position:relative}
+.b3-card:hover{transform:translateY(-4px);box-shadow:0 12px 26px rgba(47,92,64,.16)}
+.b3-card-img{width:100%;aspect-ratio:1/1;background:#eef2ea;object-fit:cover;display:block}
+.b3-card-img-ph{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:34px;background:linear-gradient(150deg,#f3efe2,#e3eadf)}
+.b3-card-body{padding:9px 10px 10px}
+.b3-card-name{font-size:13px;font-weight:700;color:#2f5c40;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b3-card-code{font-size:10.5px;color:#8a9a88;margin:2px 0 6px;word-break:break-all;font-family:ui-monospace,Menlo,monospace}
+.b3-card-comment{font-size:12px;color:#5c5146;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.b3-card-tag{position:absolute;right:8px;top:8px;background:linear-gradient(135deg,#5aa87a,#4a7c59);color:#fff;font-size:10px;
+  padding:3px 8px;border-radius:999px;box-shadow:0 3px 8px rgba(47,92,64,.35);letter-spacing:.06em}
+.b3-card-tag.pending{background:linear-gradient(135deg,#d4a03d,#c08a2d)}
+.b3-empty{padding:44px 20px;text-align:center;color:#6b7a66;font-size:13.5px;line-height:2}
+.b3-empty b{color:#2f5c40}
+.b3-empty .b3-cta{margin-top:10px}
+
+/* ---- 表单 ---- */
+.b3-form label{display:block;font-size:13px;font-weight:700;color:#2f5c40;margin:12px 0 6px}
+.b3-form input[type=text],.b3-form textarea{width:100%;border:1.5px solid rgba(74,124,89,.45);border-radius:10px;
+  background:#fff;padding:10px 12px;font-size:14px;color:#3d3229;outline:none;box-sizing:border-box;font-family:inherit}
+.b3-form textarea{resize:vertical;min-height:84px}
+.b3-form input:focus,.b3-form textarea:focus{border-color:#4a7c59;box-shadow:0 0 0 3px rgba(74,124,89,.15)}
+.b3-check{display:flex;gap:9px;align-items:flex-start;background:rgba(231,240,231,.8);border:1px solid rgba(74,124,89,.35);
+  border-radius:12px;padding:11px 12px;margin-top:12px;font-size:12.5px;color:#44533f;line-height:1.75;cursor:pointer}
+.b3-check input{margin-top:3px;accent-color:#4a7c59}
+.b3-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:none;border-radius:999px;cursor:pointer;
+  font-size:14px;font-weight:700;letter-spacing:.06em;padding:11px 22px;transition:.25s}
+.b3-btn-main{background:linear-gradient(135deg,#5aa87a,#3f7452);color:#fff;box-shadow:0 8px 20px rgba(47,92,64,.3)}
+.b3-btn-main:hover{filter:brightness(1.06);transform:translateY(-1px)}
+.b3-btn-soft{background:#eef3e9;color:#2f5c40;border:1px solid rgba(74,124,89,.4)}
+.b3-btn-gold{background:linear-gradient(135deg,#e5c98a,#c9a96e);color:#3d3229;box-shadow:0 8px 18px rgba(201,169,110,.35)}
+.b3-btn:disabled{opacity:.55;cursor:not-allowed}
+.b3-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.b3-muted{font-size:11.5px;color:#7c8f79;line-height:1.8}
+.b3-imgchips{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.b3-imgchip{width:56px;height:56px;border-radius:10px;overflow:hidden;border:2px solid transparent;cursor:pointer;background:#eee}
+.b3-imgchip img,.b3-imgchip video{width:100%;height:100%;object-fit:cover}
+.b3-imgchip.on{border-color:#4a7c59;box-shadow:0 0 0 2px rgba(74,124,89,.25)}
+.b3-quote{font-size:12px;color:#8a6d3b;background:linear-gradient(135deg,#f7f1e3,#fdf8ee);border:1px dashed #c9a96e;
+  border-radius:12px;padding:10px 12px;line-height:1.8;margin-top:10px}
+
+/* ---- 审核区 ---- */
+.b3-admin-tabs{display:flex;gap:8px;margin:12px 0}
+.b3-tab{padding:7px 14px;border-radius:999px;border:1px solid rgba(74,124,89,.4);background:#fff;color:#3f7452;font-size:12.5px;cursor:pointer}
+.b3-tab.on{background:#4a7c59;color:#fff}
+.b3-admin-list{display:flex;flex-direction:column;gap:10px}
+.b3-arow{background:#fff;border:1px solid rgba(74,124,89,.3);border-radius:14px;padding:10px 12px;display:flex;gap:12px;align-items:flex-start}
+.b3-arow .b3-card-img{width:58px;height:58px;aspect-ratio:auto;border-radius:10px;flex:0 0 58px}
+.b3-arow-info{flex:1;min-width:0}
+.b3-arow-info .t{font-size:13.5px;font-weight:700;color:#2f5c40}
+.b3-arow-info .c{font-size:11.5px;color:#7a8a76;margin:2px 0 4px;word-break:break-all}
+.b3-arow-info .m{font-size:12.5px;color:#4d4238;line-height:1.6;background:#faf6ec;border-radius:8px;padding:6px 9px}
+.b3-arow-ops{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.b3-mini{padding:6px 12px;font-size:12px;border-radius:999px;border:none;cursor:pointer;font-weight:600}
+.b3-mini.ok{background:#4a7c59;color:#fff}
+.b3-mini.off{background:#f2ead9;color:#8a6d3b;border:1px solid #c9a96e}
+.b3-mini.del{background:#fbecec;color:#b04545;border:1px solid #e0b3b3}
+.b3-mini:disabled{opacity:.5}
+.b3-discount{width:64px;padding:5px 8px;border:1px solid rgba(201,169,110,.6);border-radius:8px;font-size:12.5px;text-align:center;background:#fffdf6}
+
+/* ---- 晒单状态卡 ---- */
+.b3-status{border-radius:14px;padding:14px;margin-top:12px;text-align:center;font-size:13.5px;line-height:1.9}
+.b3-status.ok{background:linear-gradient(135deg,#e9f5ec,#dcefe0);border:1px solid #4a7c59;color:#2f5c40}
+.b3-status.warn{background:linear-gradient(135deg,#fdf6e4,#f8ecd2);border:1px solid #d4a03d;color:#8a6a1f}
+.b3-status .big{font-size:18px;font-weight:800}
+
+/* 大图查看 */
+.b3-lightbox{position:fixed;inset:0;background:rgba(10,14,10,.88);z-index:13050;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.b3-lightbox.show{display:flex}
+.b3-lightbox img,.b3-lightbox video{max-width:94vw;max-height:80vh;border-radius:12px;object-fit:contain}
+.b3-lightbox .cap{color:#e8e0cc;font-size:13px;max-width:80vw;text-align:center;line-height:1.8}
+@media(max-width:640px){
+  .b3-dm-stage{height:150px}
+  .b3-panel{width:96vw;border-radius:16px}
+  .b3-arow{flex-direction:column}
+}
+
+/* ============================================================
+ * 手机端「生辰测石 / AI 定制」布局优化（birch3）
+ * ============================================================ */
+
+/* 珍品橱窗：删掉小购物车按钮（已不做线上下单） */
+.gallery-add,.lp-add,.gallery-cart,.lp-cart{display:none!important}
+
+/* AI 快捷条：吸顶常驻，翻看面板时永远够得到 */
+.b3-ai-quick{display:none}
+.b3-ai-quick .b3-aiq-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;flex:1;
+  border:none;border-radius:14px;padding:14px 12px;
+  background:linear-gradient(135deg,#e8b84a,#c9933a);color:#fff;
+  font-size:15.5px;font-weight:800;letter-spacing:.04em;cursor:pointer;
+  box-shadow:0 8px 20px rgba(201,147,58,.35);transition:transform .2s;
+}
+.b3-ai-quick .b3-aiq-btn:active{transform:scale(.97)}
+.b3-ai-quick .b3-aiq-tip{display:block;font-size:11px;font-weight:500;color:#7c6a45;margin-top:4px;letter-spacing:.02em}
+.b3-ai-quick .b3-aiq-contact{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  margin-left:8px;border:1px solid rgba(74,124,89,.45);background:#fff;
+  color:#2f5c40;border-radius:12px;padding:10px 12px;font-size:13px;font-weight:600;text-decoration:none;
+}
+@media(max-width:720px){
+  /* 快捷条常驻吸顶 */
+  .b3-ai-quick{display:flex;align-items:center;gap:0;position:sticky;top:0;z-index:70;
+    padding:10px 12px;margin:-6px -4px 8px;
+    background:linear-gradient(180deg, rgba(253,250,243,.98), rgba(253,250,243,.92));
+    backdrop-filter:blur(10px);border-bottom:1px solid rgba(201,169,110,.45);
+    border-radius:0 0 14px 14px;box-shadow:0 6px 18px rgba(90,70,30,.10);}
+  /* 面板本体在手机上减少留白，让内容更靠上 */
+  #customizePanel{padding-top:4px}
+  #customizePanel .customize-grid{display:block}
+  #customizePanel .customize-left{width:100%!important}
+  #customizePanel .customize-right{width:100%!important;margin-top:2px}
+  #customizePanel .bracelet-box{height:auto;min-height:150px}
+  #customizePanel .bracelet-box svg{width:min(210px,60vw);height:auto;margin:0 auto;display:block}
+  /* 预览下方小工具(随机/清空/导出)：一行、缩小、次要化 */
+  #customizePanel .bracelet-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:6px 0}
+  #customizePanel .bracelet-actions .btn{padding:6px 10px;font-size:11.5px;margin:0!important;border-radius:999px;
+    background:rgba(255,255,255,.7);color:#6b7a66;border:1px solid rgba(74,124,89,.25);flex:0 0 auto}
+  /* 模式大卡片(tab)小化成一排等宽按钮 */
+  #customizePanel .cust-modes{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  #customizePanel .cust-mode{width:auto!important;flex:1 1 30%;min-width:0;padding:8px 4px;font-size:12px;border-radius:10px;text-align:center}
+  #customizePanel .cust-mode .cm-icon{font-size:16px;margin:0 auto 2px}
+  /* 联系商家大卡片不再占一整块：压成小胶囊提示，挪到最底部 */
+  #customizePanel .cust-mode.tier.contact{order:10;flex:1 1 100%;width:100%!important;margin:6px 0 0!important;
+    padding:8px 10px;display:flex;align-items:center;gap:8px;justify-content:center;
+    background:rgba(255,255,255,.85)!important;border:1px dashed rgba(201,169,110,.6);border-radius:12px}
+  #customizePanel .cust-mode.tier.contact .cm-text,#customizePanel .cust-mode.tier.contact .cp-steps{display:none}
+  /* 隐藏每个 tab 里重复的旧「✨ 智能搭配」按钮（统一走顶部快捷条） */
+  #customizePanel button[onclick*="oneClickConfig"]{display:none!important}
+  /* tab 内部区块在手机上不强制卡片大留白 */
+  #customizePanel #custBirth,#customizePanel #custHex,#customizePanel #custRandom{margin-top:4px}
+  #customizePanel .birth-grid{grid-template-columns:1fr 1fr;gap:6px}
+  #customizePanel .birth-grid select,#customizePanel .birth-grid input{font-size:15px;padding:8px 6px;border-radius:8px}
+  #customizePanel .btn{width:100%;margin:6px 0 0!important;border-radius:12px}
+  #customizePanel #baziResult,#customizePanel #aiDesignTop,#customizePanel #aiRandomResult{margin-top:8px}
+}
+
+
+/* ============================================================
+ * 客户授权分享区（首页内嵌，位于「臻选推荐」正上方）
+ * ============================================================ */
+.b3-fab{display:none!important} /* 旧浮层按钮兜底隐藏 */
+.b3-shares{position:relative;width:100%;background:linear-gradient(180deg,#faf6ec,#f4efe1);}
+.b3-shares-inner{max-width:1060px;margin:0 auto;padding:34px 18px 40px;box-sizing:border-box}
+.b3-shares-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.b3-shares-tt .b3-shares-eyebrow{font-family:Georgia,'Times New Roman',serif;text-transform:uppercase;letter-spacing:.3em;font-size:11px;color:#b08a44;display:block;margin-bottom:8px}
+.b3-shares-tt h2{margin:0 0 6px;font-size:clamp(20px,3.4vw,28px);letter-spacing:.1em;color:#2c3a2b;font-weight:800}
+.b3-shares-tt p{margin:0;font-size:12.5px;color:#6b7a66;line-height:1.8}
+.b3-shares-tt p b{color:#8a6d3b}
+.b3-shares-cta{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(74,124,89,.45);color:#2f5c40;
+  background:#fff;border-radius:999px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;text-decoration:none;box-shadow:0 4px 12px rgba(47,92,64,.08)}
+/* 弹幕条 */
+.b3-dm-line{position:relative;height:56px;border-radius:14px;overflow:hidden;margin-bottom:16px;
+  background:radial-gradient(120% 160% at 85% 0%,rgba(201,169,110,.3),transparent 55%),linear-gradient(160deg,#22301f,#2c4226);
+  box-shadow:0 8px 20px rgba(20,30,18,.25);}
+.b3-dm-line .b3-dm-hint{position:absolute;left:12px;top:50%;transform:translateY(-50%);z-index:2;font-size:10.5px;color:#d8c9a3;letter-spacing:.16em;
+  background:rgba(0,0,0,.3);padding:4px 10px;border-radius:999px;border:1px solid rgba(231,213,168,.4);white-space:nowrap}
+.b3-dm-line .b3-dm-layer{position:absolute;inset:0;overflow:hidden}
+.b3-share-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.b3-share-grid .b3-card{background:#fff;border:1px solid rgba(74,124,89,.28);border-radius:14px;overflow:hidden;cursor:pointer;position:relative;transition:transform .25s,box-shadow .25s}
+.b3-share-grid .b3-card:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(47,92,64,.14)}
+.b3-empty2{text-align:center;color:#7a8a76;font-size:13px;line-height:2;padding:26px 12px;background:rgba(255,255,255,.6);
+  border:1px dashed rgba(74,124,89,.4);border-radius:16px}
+@media(max-width:720px){
+  .b3-shares-inner{padding:24px 14px 30px}
+  .b3-share-grid{grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px}
+  .b3-shares-cta{width:100%;justify-content:center;margin-top:2px}
+  .b3-dm-line{height:52px}
+}
+
+/* 客户晒单卡 · 对齐臻品橱窗：品名 + 设计理念（取自订单记录） */
+.b3-share-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.b3-share-grid .b3-card .b3-card-img{aspect-ratio:1/1;width:100%;border-radius:0}
+.b3-share-grid .b3-card-body{padding:11px 12px 13px}
+.b3-share-grid .b3-card-name{font-size:14.5px;letter-spacing:.03em}
+.b3-share-grid .b3-card-idea{font-size:12px;color:#6b7a66;line-height:1.75;margin-top:5px;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+@media(max-width:720px){
+  .b3-share-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .b3-share-grid .b3-card-name{font-size:13px}
+  .b3-share-grid .b3-card-idea{font-size:11px;-webkit-line-clamp:2}
+}
+
+/* 客户晒单卡 = 臻品橱窗显示模式（gallery-item 同款：等高图片 + 居中品名） */
+.b3-share-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.b3-share-grid .gallery-item{background:#fff;border:1px solid rgba(74,124,89,.22);border-radius:14px;overflow:hidden;
+  cursor:pointer;box-shadow:0 6px 16px rgba(47,92,64,.06);transition:transform .25s,box-shadow .25s;margin:0}
+.b3-share-grid .gallery-item:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(47,92,64,.16)}
+.b3-share-grid .gallery-item img,.b3-share-grid .gallery-item video{width:100%;height:160px;object-fit:cover;display:block;background:#e8f5ef}
+.b3-share-grid .gallery-name{padding:8px 6px 9px;font-size:13px;color:var(--text-dark,#3d3229);text-align:center;
+  word-break:break-word;line-height:1.5;font-family:inherit}
+@media(max-width:720px){
+  .b3-share-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .b3-share-grid .gallery-item img,.b3-share-grid .gallery-item video{height:150px}
+}
+
+
+/* ============================================================
+ * AI 定制 · 生成中 / 生成结果 / 手机端布局（2026-09-22）
+ * 覆盖对象：showLoading(...,'ai') 的加载框、.ai-design-box 结果卡、
+ *          手机端顶部「✨ AI 智能定制」快捷条
+ * 原则：只覆盖尺寸与间距，不动配色与结构；结果区一律 100% 宽不横向溢出
+ * ============================================================ */
+
+/* ---- AI 结果卡：效果图与说明（由 birch3.js / 旧 aiDesign 输出） ---- */
+.ai-design-box{max-width:100%;box-sizing:border-box;overflow-wrap:break-word;word-break:break-word}
+.ai-design-box .ai-img-wrap{margin-top:12px;text-align:center;line-height:0}
+.ai-design-box .ai-img{max-width:100%;max-height:340px;width:auto;height:auto;display:inline-block;
+  border-radius:14px;border:1px solid rgba(201,169,110,.5);box-shadow:0 14px 34px rgba(0,0,0,.18);cursor:zoom-in}
+.ai-design-box .ai-img-cap{font-size:10.5px;color:var(--text-light);margin-top:6px;text-align:center;line-height:1.6}
+/* 兜住旧实现（bundle.js 直出、带内联 max-height）的效果图 */
+.ai-design-box img{max-width:100%}
+
+/* ---- AI 加载框：窄屏不再顶出屏幕（原来 padding 38px 48px + min-width 240px
+        在 320~375px 宽的手机上会横向溢出） ---- */
+.loading-mask.ai-mode .ai-loading-text{white-space:pre-line;line-height:1.65}
+
+@media(max-width:720px){
+  /* 快捷条：标题与提示改为上下两行，提示允许换行；
+     原来是 row + gap:8px，长提示会把按钮挤到溢出 */
+  .b3-ai-quick .b3-aiq-btn{flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;padding:10px 10px;line-height:1.35;min-width:0}
+  .b3-ai-quick .b3-aiq-btn>span:first-child{font-size:15px;white-space:nowrap}
+  .b3-ai-quick .b3-aiq-tip{margin-top:3px;font-size:10.5px;line-height:1.5;text-align:center;
+    width:100%;white-space:normal;word-break:break-word}
+  .b3-ai-quick .b3-aiq-contact{padding:10px;font-size:12.5px;white-space:nowrap}
+
+  /* AI 加载框：收紧内边距、限制宽度、缩小太极与机器人，保证 320px 宽也不溢出 */
+  .loading-mask.ai-mode .loading-box{padding:24px 18px 20px;min-width:0;
+    width:min(84vw,300px);max-width:calc(100vw - 32px);border-radius:22px}
+  .loading-mask.ai-mode .ai-robot-big{width:52px;height:52px;margin:0 auto 10px}
+  /* .ai-loading-wrap 的 104px 写在行内样式上，必须 !important 才盖得住 */
+  .loading-mask.ai-mode .ai-loading-wrap{width:74px!important;height:74px!important;margin:0 auto 14px}
+  .loading-mask.ai-mode .ai-loading-text{font-size:14px;letter-spacing:2px}
+  .loading-mask.ai-mode .ai-loading-sub{font-size:9.5px;letter-spacing:2px;margin-top:8px}
+
+  /* AI 结果卡：手机上收紧留白与字号，效果图限高避免一屏只剩图 */
+  .ai-design-box{padding:12px;border-radius:12px}
+  .ai-design-box .ai-title{font-size:12.5px;margin-bottom:7px}
+  .ai-design-box .ai-text{font-size:12.5px;line-height:1.85}
+  .ai-design-box .ai-poem{font-size:12.5px;letter-spacing:.5px;padding:9px 10px;line-height:1.9}
+  .ai-design-box .ai-robot{padding:6px 8px;gap:8px;margin-bottom:8px}
+  .ai-design-box .ai-robot svg{width:28px;height:28px}
+  .ai-design-box .ai-robot span{font-size:11.5px}
+  .ai-design-box .ai-img{max-height:44vh;border-radius:12px}
+  .ai-design-box img{max-height:44vh!important}
+
+  /* 定制面板里任一 AI 结果容器：确保不横向溢出、结果出来后留出底部空间 */
+  #customizePanel #baziResult,#customizePanel #aiDesignTop,#customizePanel #aiRandomResult{
+    max-width:100%;overflow-x:hidden}
+}
+
+@media(max-width:360px){
+  .loading-mask.ai-mode .loading-box{padding:20px 14px 18px;width:min(90vw,280px)}
+  .loading-mask.ai-mode .ai-loading-wrap{width:64px!important;height:64px!important;margin-bottom:10px}
+  .loading-mask.ai-mode .ai-robot-big{width:44px;height:44px;margin-bottom:8px}
+  .b3-ai-quick .b3-aiq-btn>span:first-child{font-size:14px}
+  .b3-ai-quick .b3-aiq-tip{font-size:10px}
+}
+
+/* 出图失败提示（原先失败是静默的：只显示文案、没有图，用户无从判断原因） */
+.ai-design-box .ai-img-warn{margin-top:12px;padding:10px 12px;border-radius:12px;
+  background:linear-gradient(135deg,#fff6e8,#fdeedd);border:1px dashed rgba(212,160,61,.75);
+  color:#8a5a2b;font-size:12.5px;line-height:1.8;word-break:break-word}
+.ai-design-box .ai-img-warn b{color:#b4551f}
+
+/* ============================================================
+ * AI 结果卡 · 版面与观感打磨（2026-09-26）
+ * 目标：效果图成为主角、信息层级分明、窄屏不溢出；
+ *       全部规则都限定在 .ai-design-box 内，不动站点其它区域。
+ * ============================================================ */
+
+/* ---- 结果卡整体：与站点「桦皮纸 + 烫金」语言一致 ---- */
+.ai-design-box{
+  background:linear-gradient(168deg,#fffdf8 0%,#f8f3e8 62%,#f4eee1 100%);
+  border:1px solid rgba(201,169,110,.45);
+  border-radius:16px;
+  padding:16px 15px 14px;
+  box-shadow:0 12px 30px rgba(61,90,69,.10),inset 0 1px rgba(255,255,255,.85);
+  position:relative;overflow:hidden;
+}
+.ai-design-box:before{
+  content:"";position:absolute;top:-46px;right:-40px;width:150px;height:150px;border-radius:50%;
+  background:radial-gradient(circle at 50% 50%,rgba(201,169,110,.18),transparent 68%);
+  pointer-events:none;
+}
+
+/* ---- 标题：左侧烫金竖线 + 字距 ---- */
+.ai-design-box .ai-title{
+  display:flex;align-items:center;gap:8px;
+  font-family:Georgia,"Songti SC",serif;
+  font-size:13.5px;font-weight:700;color:#8a6d3b;letter-spacing:.22em;
+  margin:0 0 10px;
+}
+.ai-design-box .ai-title:before{
+  content:"";flex:0 0 auto;width:3px;height:15px;border-radius:2px;
+  background:linear-gradient(180deg,#e2c98d,#a8874a);
+}
+
+/* ---- 正文：中文阅读节奏（首行不缩进，行距放宽，段间留白） ---- */
+.ai-design-box .ai-text{
+  font-size:13.5px;line-height:2.05;color:#40372c;letter-spacing:.01em;
+}
+.ai-design-box .ai-text .ai-h{font-size:14px;font-weight:700;color:#2f5c40;margin:12px 0 6px;letter-spacing:.04em}
+.ai-design-box .ai-text .ai-p{margin:0 0 8px}
+.ai-design-box .ai-text .ai-p:last-child{margin-bottom:0}
+
+/* ---- 诗曰：卷轴感的虚线金框 + 衬线字 ---- */
+.ai-design-box .ai-poem{
+  position:relative;margin-top:14px;padding:14px 14px 12px;
+  background:linear-gradient(135deg,#fdf8ee,#f6efdf);
+  border:1px solid rgba(201,169,110,.55);border-radius:14px;
+  font-family:Georgia,"Songti SC","STSong",serif;
+  font-size:13.5px;color:#8a6d3b;line-height:2.15;letter-spacing:.12em;text-align:center;
+  box-shadow:inset 0 1px rgba(255,255,255,.75);
+}
+.ai-design-box .ai-poem:before{
+  content:"诗 曰";position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+  background:#fdf8ee;padding:0 10px;font-size:10.5px;letter-spacing:.3em;color:#b99a5c;
+}
+
+/* ---- 效果图：画廊式画框，图片是主角 ---- */
+.ai-design-box .ai-img-wrap{
+  margin-top:14px;padding:8px;border-radius:16px;
+  background:linear-gradient(160deg,#1d2723,#0d1411 70%);
+  border:1px solid rgba(201,169,110,.42);
+  box-shadow:0 16px 34px rgba(15,22,18,.28);
+  line-height:0;
+}
+.ai-design-box .ai-img{
+  width:100%;height:auto;max-width:100%;max-height:52vh;object-fit:contain;
+  border-radius:10px;display:block;margin:0 auto;cursor:zoom-in;
+  background:#101614;
+  transition:transform .45s cubic-bezier(.16,1,.3,1),box-shadow .45s ease;
+}
+@media(hover:hover){
+  .ai-design-box .ai-img:hover{transform:scale(1.012);box-shadow:0 10px 28px rgba(201,169,110,.28)}
+}
+.ai-design-box .ai-img-cap{
+  margin-top:9px;font-size:10.5px;color:#8a9a88;letter-spacing:.08em;line-height:1.7;
+}
+
+/* ---- 失败提示：与「诗曰」同一金调，不再像报错条 ---- */
+.ai-design-box .ai-img-warn{
+  margin-top:12px;padding:11px 13px;border-radius:13px;
+  background:linear-gradient(135deg,#fff7ea,#fbeddb);
+  border:1px dashed rgba(201,140,58,.7);
+  color:#8a5a2b;font-size:12.5px;line-height:1.85;word-break:break-word;
+}
+
+/* ---- 旧实现（bundle 直出、带内联样式）也统一观感 ---- */
+.ai-design-box img{border-radius:12px;max-width:100%;height:auto;margin:0 auto;display:block}
+.ai-design-box [style*="max-height:320px"]{max-height:52vh!important}
+
+/* ---- 窄屏：图不顶满、留白收紧、长词不撑破 ---- */
+@media(max-width:720px){
+  .ai-design-box{padding:13px 12px 12px;border-radius:14px}
+  .ai-design-box .ai-title{font-size:12.5px;letter-spacing:.16em;margin-bottom:8px}
+  .ai-design-box .ai-text{font-size:13px;line-height:1.95}
+  .ai-design-box .ai-poem{font-size:12.5px;letter-spacing:.06em;line-height:2;padding:12px 10px 10px}
+  .ai-design-box .ai-img-wrap{padding:6px;border-radius:14px}
+  .ai-design-box .ai-img{max-height:46vh}
+}
+@media(max-width:360px){
+  .ai-design-box .ai-text{font-size:12.5px}
+  .ai-design-box .ai-poem{letter-spacing:.02em}
+}
+
+/* ---- 出图 Key 区（后台注入）：与其它表单项对齐 ---- */
+#b3ImgBlock,#b3ImgModelBlock{margin-bottom:16px}
+#b3ImgKeyStatus{color:#2f5c40!important;font-weight:600}
