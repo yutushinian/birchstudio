@@ -712,7 +712,7 @@
     var el = document.getElementById('aiFuncUrl');
     if (!el) return false;
     var url = (typeof window.__b3AiEndpoint === 'function' && window.__b3AiEndpoint())
-      || 'https://btfxanbzshefhobndywd.supabase.co/functions/v1/birch-ai';
+      || 'https://api.birchstudio.cn/functions/v1/birch-ai';
     el.value = url;
     try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
     var t = (function () { try { return (0, eval)('toast'); } catch (e) { return undefined; } })();
@@ -1109,7 +1109,7 @@
  * ------------------------------------------------------------
  * 现象：登录失败 + AI「服务错误，未能到达服务端」+ 权限校验异常，
  *       三者往往同源 —— 浏览器连不上 Supabase 项目域名
- *       （<项目 ref>.supabase.co）。
+ *       （Supabase 项目域名）。
  *       该域名在部分网络/地区会被 DNS 污染、连接重置或超时；
  *       静态站（GitHub Pages）却正常，所以看起来像"网站坏了"。
  *
@@ -1148,17 +1148,16 @@
 
   window.__b3NetCheck = async function () {
     var base = String(g('SUPABASE_URL') || '').replace(/\/$/, '');
-    var projRef = (base.match(/https?:\/\/([a-z0-9]+)\.supabase\.co/i) || [])[1] || '';
+    /* 前端现在连的是自有反代域名（https://api.birchstudio.cn），URL 里已不含项目 ref；
+       排障时仍想拿 Supabase 原始域名做对照，所以这里留一个已知 ref 兜底。 */
+    var PROJ_REF_KNOWN = 'btfxanbzshefhobndywd';
+    var projRef = (base.match(/https?:\/\/([a-z0-9]+)\.supabase\.co/i) || [])[1] || PROJ_REF_KNOWN;
     var candidates = [];
-    if (projRef) {
-      candidates.push({ name: '① 项目默认域名', root: 'https://' + projRef + '.supabase.co' });
-      candidates.push({ name: '② 新版直连前缀', root: 'https://' + projRef + '.supabase.co' });
-      candidates.push({ name: '③ API 网关域名', root: 'https://' + projRef + '.supabase.co' });
-    }
+    if (base) candidates.push({ name: '① 页面当前配置的地址', root: base });
+    candidates.push({ name: '② Supabase 原始域名（对照）', root: 'https://' + projRef + '.supabase.co' });
     var out = { 页面配置的域名: base, 探测: [], 结论: '' };
     for (var i = 0; i < candidates.length; i++) {
       var c = candidates[i];
-      if (i > 0) continue;                       /* 默认域名只探一次，别名留位便于将来扩展 */
       var rest = await probe(c.root + '/rest/v1/', 12000);
       var fn = await probe(c.root + '/functions/v1/birch-ai', 15000);
       out.探测.push({ 名称: c.name, 域名: c.root, REST: rest, EdgeFunction: fn });
@@ -1177,8 +1176,8 @@
       out.结论 = '浏览器连不上 Supabase 项目域名（' + base + '）。这是网络/地区限制导致的：' +
                  '静态网页能打开，但登录、后台、AI 都会失败。' +
                  '建议：① 换手机流量或其它网络重试；② 关闭代理/VPN 后重试；' +
-                 '③ 若长期如此，需要在 Supabase 后台给项目绑定自有域名（Custom Domain），' +
-                 '再把网页里的 SUPABASE_URL 换成该域名。';
+                 '③ 本站在 ' + (base ? base : '自有反代域名') + ' 上做了反代（Cloudflare Worker 回源 Supabase），' +
+                 '正常情况下不应再出现此提示；若持续如此请把本对象截图给技术。';
     }
     if (window.console) console.log('[birch] __b3NetCheck', out);
     return out;

@@ -1565,7 +1565,7 @@
           var s2 = String(v || '');
           var m = s2.match(/(?:[?&#](?:code|c|id|verify|anti)=)([A-Za-z0-9_-]{2,48})/i);
           if (m) return m[1];
-          var m2 = s2.match(/(?:birchstudio.cn|cplyzukenqxdwhfivlqx|btfxanbzshefhobndywd)[^A-Za-z0-9]{0,4}([A-Za-z0-9_-]{2,48})/i);
+          var m2 = s2.match(/(?:birchstudio.cn|cplyzukenqxdwhfivlqx)[^A-Za-z0-9]{0,4}([A-Za-z0-9_-]{2,48})/i);
           return m2 ? m2[1] : null;
         };
       }

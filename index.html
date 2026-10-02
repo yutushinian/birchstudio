@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fastly.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://gcore.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://cdn.staticfile.org" crossorigin>
-  <link rel="preconnect" href="https://btfxanbzshefhobndywd.supabase.co" crossorigin>
+  <link rel="preconnect" href="https://api.birchstudio.cn" crossorigin>
   
   
 <!-- 桦库 · CDN 兜底定义（20260930）
@@ -43,7 +43,7 @@ window.__libReady=function(n,t,s){for(var e=!0,i=0;i<n.length;i++)if(typeof wind
 </style>
   <style>@media(min-width:768px){.modal-box{max-width:400px}.form-item input,.form-item textarea,.form-item select,.login-input,#loginFormBox input{font-size:14px}.modal-box h3{font-size:17px}.modal-box .btn{font-size:14px}}
 </style>
-  <link rel="preconnect" href="https://btfxanbzshefhobndywd.supabase.co" crossorigin>
+  <link rel="preconnect" href="https://api.birchstudio.cn" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="preconnect" href="https://unpkg.com">
@@ -1327,7 +1327,7 @@ window.__libReady=function(n,t,s){for(var e=!0,i=0;i<n.length;i++)if(typeof wind
             style="background:#f6fbf8;border:1px dashed var(--border-green);border-radius:12px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--text-dark);line-height:1.9;">
             <b>📋 第一步：部署转发服务（约 3 分钟）</b><br> 1. 打开 Supabase 控制台 → 你的项目 → 左侧「Edge Functions」→ Deploy a new function<br> 2. 函数名填 <code
               style="background:#eaf4ee;padding:1px 6px;border-radius:6px;">birch-ai</code>，把仓库内「supabase/functions/birch-ai/index.ts」的内容全部粘贴进去<br> 3. 点 Deploy，函数地址就是：<code
-              style="background:#eaf4ee;padding:1px 6px;border-radius:6px;">https://btfxanbzshefhobndywd.supabase.co/functions/v1/birch-ai</code>
+              style="background:#eaf4ee;padding:1px 6px;border-radius:6px;">https://api.birchstudio.cn/functions/v1/birch-ai</code>
             <br><span style="color:#8a5a2b;">⚠️ 注意：地址必须带 <b>/functions/v1/</b>，且函数名是 <b>birch-ai</b>；历史遗留的
               <code style="background:#fdeedd;padding:1px 5px;border-radius:5px;">ai-design</code> 函数并未部署，填它会直接 404（AI 出图失败的主因）。</span>
           </div>
@@ -1338,11 +1338,11 @@ window.__libReady=function(n,t,s){for(var e=!0,i=0;i<n.length;i++)if(typeof wind
           <div class="form-item"><label>函数地址（Edge Function URL）</label>
             <div style="display:flex;align-items:center;gap:8px;">
               <input id="aiFuncUrl" style="flex:1;"
-                placeholder="https://btfxanbzshefhobndywd.supabase.co/functions/v1/birch-ai">
+                placeholder="https://api.birchstudio.cn/functions/v1/birch-ai">
               <button type="button" class="btn-light" style="flex:0 0 auto;white-space:nowrap;padding:11px 12px;border-radius:12px;font-size:12.5px;"
                 onclick="window.__b3FillAiUrl&&window.__b3FillAiUrl()">填入正确地址</button>
             </div>
-            <div style="font-size:11px;color:var(--text-light);margin-top:4px;">必须形如 …supabase.co/functions/v1/birch-ai；若填成 …functions.supabase.co/ai-design 会 404，AI 出图与智能搭配都会失败。</div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:4px;">必须形如 …/functions/v1/birch-ai（本站在用：https://api.birchstudio.cn/functions/v1/birch-ai）；填错会导致 AI 出图与智能搭配失败。</div>
           </div>
           <div class="form-item"><label>DeepSeek API Key（sk- 开头）</label>
             <div style="display:flex;align-items:center;gap:8px;">
@@ -2123,15 +2123,15 @@ window.__libReady=function(n,t,s){for(var e=!0,i=0;i<n.length;i++)if(typeof wind
      进入管理员后台的入口）都没装上 → 连点没反应。 -->
 <script src="js/early.js?v=20260929"></script>
 
-<script src="js/bundle.js?v=20261002a" defer></script>
+<script src="js/bundle.js?v=20261002b" defer></script>
 <!-- 邮件收件人修复 + AI 链路修复（端点路由/旧 ai-design 兜底/后台地址纠正）
      详见 js/fixes.js 头部说明 -->
-<script defer src="js/fixes.js?v=20261002a"></script>
+<script defer src="js/fixes.js?v=20261002b"></script>
 <script src="js/features.js?v=20260922a"></script><script>
 /* b3-ai-shim 20260922a */
 (function(){
 if(window.__b3AiHook)return;
-var W="https://btfxanbzshefhobndywd.supabase.co/functions/v1/birch-ai";
+var W="https://api.birchstudio.cn/functions/v1/birch-ai";
 function g(n){try{return (0,eval)(n);}catch(e){return void 0;}}
 function toast(m){var t=g("toast");if(typeof t==="function"){try{t(m);}catch(e){}}}
 function v(id){var el=document.getElementById(id);return el?(el.value||"").trim():"";}
