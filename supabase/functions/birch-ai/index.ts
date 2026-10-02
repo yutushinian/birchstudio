@@ -253,8 +253,16 @@ async function fetchAndStore(SB_URL, SK, remoteUrl) {
     if (!r.ok) return "";
     const buf = new Uint8Array(await r.arrayBuffer());
     if (!buf.length || buf.length > 10485760) return "";
+    /* 【2026-10-02 修复】原实现是逐字节 `bin += String.fromCharCode(buf[i])`。
+       Deno 里字符串不可变，1.2MB 的图要拼 120 万次、实际开销接近 O(n²)，
+       经常跑不完就撞上函数时间上限 → fetchAndStore 返回 "" → 回退成
+       「硅基流动 24 小时临时地址」→ 图过一天就裂（正是"图时好时坏"的老毛病）。
+       改成分块转换：同样结果，快两个数量级。 */
     let bin = "";
-    for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+    const CHUNK = 8192;
+    for (let i = 0; i < buf.length; i += CHUNK) {
+      bin += String.fromCharCode.apply(null, buf.subarray(i, i + CHUNK));
+    }
     const stored = await uploadImage(SB_URL, SK, btoa(bin));
     return stored || "";
   } catch (_) { return ""; }
