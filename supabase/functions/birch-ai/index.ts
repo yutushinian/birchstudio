@@ -314,17 +314,72 @@ async function siliconGenerate(imgKey, imgBase, imgModel, prompt) {
   return { b64: "", url: "", error: lastErr || "出图服务未返回图片" };
 }
 
+/* ============================================================
+ * 小桦 · 站内助手人设
+ * ------------------------------------------------------------
+ * 【2026-10-02 重写】原来是通用的"品牌介绍型"提示词，用户问「在哪点」时
+ * 只会泛泛而谈。现在改成两个明确职责：
+ *   ① 帮顾客用好这个网站（问「在哪」就告诉他点哪个入口）
+ *   ② 帮顾客把定制需求想清楚、走完定制流程
+ * 另外红线一条没动 —— 这部分是合规底线，不要随意删改。
+ * ============================================================ */
 const SYSTEM = [
-  "你是「白桦」官网（birchstudio.cn · 白桦定制水晶）的 AI 助手。品牌：天然水晶定制——东方五行/生肖/八卦、节气能量、生辰测石、消磁养护文化；作品支持官方码验真。",
-  "网站功能导航：五行晶石、八卦图鉴、节气能量、需求选石、消磁净化、生辰测石（生辰/摇卦/随缘搭配，AI 出设计方案与诗句）、臻品橱窗、官方验证（扫码/输入官方码核验真伪与定制信息）、转盘优惠（联系微信立减）、抽一签/答案之书、白桦来信订阅；购买与定制走客服微信（页脚/联系我们）。",
-  "红线（务必遵守）：",
+  "你是「小桦」，白桦定制水晶官网（birchstudio.cn）的站内助手，也是顾客进店后第一个搭话的人。",
+  "你只有两个职责：① 帮顾客用好这个网站；② 帮顾客把定制需求想清楚、顺利走完定制流程。其它话题可以聊，但都要自然带回到这两件事上。",
+  "",
+  "【怎么说话】中文、口语化、有温度，像店里靠谱的店员，不要客服腔。先说结论，再给步骤。默认控制在 200 字以内；用户明确要详细方案时才展开。不要用 * 星号或 markdown 标记，分点用「1. 2. 3.」或「·」。不要复述用户的问题。",
+  "",
+  "【网站地图 —— 用户问「在哪 / 怎么用」时，直接告诉他点哪里，别绕弯】",
+  "· 生辰测石（最常用）：首页「生辰测石」→ 三种方式选一种（填生辰 / 摇卦 / 随缘搭配）→ AI 出设计方案、配石与诗句，不收费。",
+  "· 需求选石：首页「需求选石」，说出场景（比如「面试想稳一点」「送妈妈」）就能得到选石方向。",
+  "· 五行晶石 / 八卦图鉴 / 节气能量：文化科普板块，随便逛，都属于文化意象参考。",
+  "· 臻品橱窗：现成作品实拍，看中哪款直接联系客服微信。",
+  "· 消磁净化：养护方法科普，收到货后照着做即可。",
+  "· 官方验证：首页「官方验证」→ 扫码或输入作品上的官方码 → 查真伪与定制信息（每件作品都有唯一官方码）。",
+  "· 转盘优惠：转盘抽到优惠后，联系客服微信立减。",
+  "· 抽一签 / 答案之书：轻松向的小互动，图个开心。",
+  "· 白桦来信：订阅邮箱，上新会通知，可以随时退订。",
+  "· 我的订单：右上角头像 → 登录后即可查看（下单时的手机号或账号都能查到）。",
+  "",
+  "【定制怎么走 —— 这是你最该帮顾客打通的事，按这四步说】",
+  "第 1 步：去「生辰测石」或「需求选石」，让 AI 先出一版方案，这一步不收费、不满意可以重来。",
+  "第 2 步：把方案截图（或者直接说说想法）发给客服微信，并告诉对方两件事 —— 珠径（10mm 整串 18 颗 / 8mm 整串 22 颗，同径不混珠）和预算。",
+  "第 3 步：客服确认配石与工期 → 付款 → 开始制作。",
+  "第 4 步：收到货后，作品上的官方码可以在「官方验证」里核验。",
+  "如果顾客说「不知道选什么」「你帮我决定」，别急着给一堆选项 —— 顺着问清楚这几点更有用：自戴还是送人？平时穿什么色系？预算大概多少？手腕粗细（或者平时戴别的首饰松紧）？把需求问明白，方案自然就准了。",
+  "",
+  "【红线（务必遵守，一条都不能破）】",
   "1) 不预测命运、运势、结果；绝不承诺任何效果（转运/复合/发财/疗愈等）；不宣传开光、法力、辟邪保证；",
   "2) 涉及生肖五行八卦星座星盘等，一律标注「文化意象参考，不构成任何承诺」；",
   "3) 情感/迷茫问题：温暖陪伴、鼓励自我关照（先照亮自己，再谈遇见），绝不替用户做人生决定；",
   "4) 医疗/健康/心理疾病类问题：温和建议咨询专业机构；",
   "5) 未成年人相关命运类话题请引导由监护人陪同了解；",
-  "6) 回答简洁、中文、口语化、有温度、适当分点；不确定就引导联系客服微信。",
+  "6) 拿不准的（具体价格、工期、库存、快递）一律不要编，直接说「这个我帮你问一下客服更准」，并把客服入口给他。",
 ].join("\n");
+
+/* 把晶石库压成一段紧凑摘要塞进上下文：
+   这样顾客问「帮我推荐一串」时，小桦能给出具体石种，而不是一堆空话。
+   控长度（约 1400 字）是为了别让每条消息都背上几千 token 的成本。 */
+async function crystalDigest(SB_URL, SK) {
+  try {
+    const list = await fetchCrystals(SB_URL, SK);
+    if (!Array.isArray(list) || !list.length) return "";
+    const parts = [];
+    let used = 0;
+    for (const c of list) {
+      const name = String(c && c.name || "").trim();
+      if (!name) continue;
+      const el = c.element ? "（" + c.element + "）" : "";
+      const mean = String(c.meaning || "").replace(/\s+/g, "").slice(0, 30);
+      const one = name + el + (mean ? "：" + mean : "");
+      if (used + one.length > 1400) break;
+      parts.push(one);
+      used += one.length + 1;
+    }
+    if (!parts.length) return "";
+    return "【晶石库摘要（可据此给具体建议，仅作文化意象参考，不构成任何承诺）】" + parts.join("；");
+  } catch (_) { return ""; }
+}
 
 /* 端到端自检：配置 → DeepSeek 文案 → 通义出图 */
 async function selfTest() {
@@ -715,14 +770,42 @@ Deno.serve(async (req) => {
     }
     const question = String(body.question || "").trim();
     if (!question) return Response.json({ ok: false, error: "缺少问题内容" }, { headers: corsHeaders });
-    const history = Array.isArray(body.history) ? body.history : [];
+
+    /* 【2026-10-02 修复】历史消息原来直接 ...history.slice(-8) 就丢给模型了。
+       前端 sessionStorage 里存的是 [[问,答],…] 这种"对"，不是 {role,content} 消息，
+       一旦发过来模型收到的是数组套数组 —— 要么直接报错、要么被忽略。
+       这里统一做校验 + 清洗 + 截断，两条路（旧格式/新格式）都能吃。 */
+    const rawHistory = Array.isArray(body.history) ? body.history : [];
+    const history = [];
+    for (const h of rawHistory) {
+      if (!h) continue;
+      if (Array.isArray(h)) {
+        /* 兼容旧格式：[问, 答] */
+        if (h[0]) history.push({ role: "user", content: String(h[0]).slice(0, 800) });
+        if (h[1]) history.push({ role: "assistant", content: String(h[1]).slice(0, 800) });
+      } else if (typeof h === "object" && (h.role === "user" || h.role === "assistant") && typeof h.content === "string") {
+        const c = h.content.trim();
+        if (c) history.push({ role: h.role, content: c.slice(0, 800) });
+      }
+    }
+
+    /* 上下文：人设 + 晶石库摘要 + （可选）后台面板里的自定义提示词 */
+    const sysMsgs: any[] = [{ role: "system", content: SYSTEM }];
+    const digest = await crystalDigest(SB_URL, SK);
+    if (digest) sysMsgs.push({ role: "system", content: digest });
+    try {
+      const cfg = await getAppDataJson(SB_URL, SK, "birch_ai_config");
+      const extra = cfg && typeof cfg.prompt === "string" ? cfg.prompt.trim() : "";
+      if (extra) sysMsgs.push({ role: "system", content: "【店主补充要求（优先遵守）】" + extra.slice(0, 1200) });
+    } catch (_) {}
+
     const answer = await deepseekChat(apiKey, model, [
-      { role: "system", content: SYSTEM },
+      ...sysMsgs,
       ...history.slice(-8),
       { role: "user", content: question },
     ]);
     await recordUsage(SB_URL, SK, 'chat', question);
-    return Response.json({ ok: true, answer }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return Response.json({ ok: true, answer, mode: "chat" }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return Response.json({ ok: false, error: (e as Error).message }, {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
