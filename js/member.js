@@ -1040,16 +1040,20 @@
   }
 
   function paintNfcModal(d, code) {
-    var payload = SITE + '/#c=' + encodeURIComponent(code);
+    var payload = SITE + '/?c=' + encodeURIComponent(code);
     openModal('<h3>NFC 码 · ' + esc(d.card_no) + '</h3>' +
       '<div class="mc-nfc-code">' + esc(code) + '</div>' +
       '<div class="mc-hint">把下面这段写入 NFC 标签。短码 9 位（45 bit），链接共 ' + payload.length +
       ' 字节；URI + 文本双记录合计约 82 字节，NTAG213 也能装下。</div>' +
+      '<div class="mc-hint warn" style="margin-top:8px;">写卡类型请选「<b>文本 / Text</b>」。' +
+      '「网址 / URI」类型在很多写卡 App 里会丢掉 <code>?</code> 或 <code>#</code> 之后的内容，' +
+      '刷上去只会打开首页、进不了这张卡。盒子本身也只认文本记录。</div>' +
       '<div class="mc-field" style="margin-top:12px;"><label>NFC 内容</label>' +
       '<textarea class="mc-input" id="mcNfcText" readonly style="min-height:64px;">' + esc(payload) + '</textarea></div>' +
       '<div id="mcQr" style="text-align:center;margin:10px 0;"></div>' +
       '<div class="mc-row"><button class="mc-btn" onclick="MC.copyNfc()">复制内容</button>' +
       '<button class="mc-btn" onclick="MC.copyNfcCode(\'' + esc(code) + '\')">复制短码</button>' +
+      '<button class="mc-btn" onclick="MC.testNfc(\'' + esc(code) + '\')">试打开</button>' +
       '<button class="mc-btn primary" onclick="MC.closeModal()">完成</button></div>' +
       '<div class="mc-hint" id="mcCopyTip" style="margin-top:8px;min-height:16px;"></div>' +
       '<div class="mc-hint warn" style="margin-top:8px;">会员修改密码或管理员重置密码后，此短码立即失效，需重新生成。</div>');
@@ -1057,6 +1061,15 @@
     try {
       if (window.QRCode && box) { new window.QRCode(box, { text: payload, width: 150, height: 150 }); }
     } catch (e) {}
+  }
+
+  /** 先在本机浏览器验证短码能不能打开会员卡，排除写卡环节 */
+  function testNfc(code) {
+    try {
+      window.open(SITE + '/?c=' + encodeURIComponent(code), '_blank');
+    } catch (e) {
+      toast('浏览器拦截了新窗口，请手动复制链接打开', 'err');
+    }
   }
 
   function copyNfcCode(code) {
@@ -1342,6 +1355,7 @@
     adminNfc: adminNfc,
     copyNfc: copyNfc,
     copyNfcCode: copyNfcCode,
+    testNfc: testNfc,
     setVal: setVal,
     giftRefresh: giftRefresh,
     giftAdd: giftAdd,
