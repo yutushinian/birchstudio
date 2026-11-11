@@ -528,3 +528,13 @@
 #ordersListWrap .uo-code-tip:empty {
   display: none;
 }
+
+/* 防其它页面 button 规则串味 */
+#ordersListWrap .uo-btn,
+#ordersListWrap .uo-seg,
+#ordersListWrap .uo-mini {
+  flex: 0 0 auto;
+  min-height: 0;
+  box-sizing: border-box;
+  font-family: inherit;
+}
