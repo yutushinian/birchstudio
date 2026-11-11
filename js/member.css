@@ -216,3 +216,46 @@ textarea.mc-input { min-height: 68px; resize: vertical; }
 .mc-bind-h b{font-size:13px;color:#3d3229;}
 .mc-bind-t{font-size:11px;color:#8b7a63;line-height:1.65;margin-bottom:8px;}
 .mc-badge.off{background:#f2eee6;color:#9a8b74;}
+
+/* ===== 后台：统一板块头部 / 统计 / 卡片容器 ===== */
+.mc-adm-head{display:flex;gap:12px;align-items:flex-start;padding:16px 18px;background:#fff;border:1px solid var(--mc-line);border-radius:16px;margin-bottom:12px;box-shadow:0 2px 10px rgba(93,74,45,.04);}
+.mc-adm-head-i{width:42px;height:42px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;background:linear-gradient(135deg,#eef5ef,#f7f1e4);}
+.mc-adm-head-t{flex:1;min-width:0;}
+.mc-adm-head-t h3{font-size:17px;color:var(--mc-ink);margin:0 0 4px;font-weight:700;}
+.mc-adm-head-t p{font-size:12px;color:var(--mc-sub);line-height:1.65;margin:0;}
+
+.mc-adm-note{font-size:12px;color:#8a6a2f;background:#fdf8ec;border:1px solid #f0e3c4;border-radius:12px;padding:10px 13px;line-height:1.7;margin-bottom:12px;}
+
+.mc-adm-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+.mc-adm-stat{background:#fff;border:1px solid var(--mc-line);border-radius:14px;padding:12px 14px;}
+.mc-adm-stat span{display:block;font-size:11px;color:var(--mc-sub);margin-bottom:6px;letter-spacing:.3px;}
+.mc-adm-stat b{font-size:20px;color:var(--mc-ink);font-weight:700;font-variant-numeric:tabular-nums;}
+.mc-adm-stat i{font-style:normal;font-size:11px;color:var(--mc-sub);margin-left:4px;}
+
+.mc-adm-card{background:#fff;border:1px solid var(--mc-line);border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(93,74,45,.04);}
+.mc-adm-card-h{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #f1ebdf;background:#fdfbf6;}
+.mc-adm-card-t{font-size:13px;font-weight:600;color:var(--mc-ink);}
+.mc-adm-card-ops{display:flex;gap:8px;flex-wrap:wrap;}
+.mc-adm-search{max-width:250px;flex:1 1 180px;}
+.mc-adm-pane{padding:0;}
+.mc-adm-card .mc-tbl-wrap{border:0;border-radius:0;}
+.mc-adm-card .mc-empty,.mc-adm-card .mc-adm-empty{padding:34px 16px;}
+
+.mc-adm-empty{text-align:center;color:var(--mc-sub);padding:30px 16px;}
+.mc-adm-empty-i{font-size:34px;line-height:1;margin-bottom:10px;opacity:.75;}
+.mc-adm-empty b{display:block;font-size:14px;color:var(--mc-ink);margin-bottom:6px;}
+.mc-adm-empty p{font-size:12px;color:var(--mc-sub);margin:0 0 14px;line-height:1.7;}
+
+.mc-tbl-gift td{vertical-align:middle;}
+.mc-gift-cell{display:flex;align-items:center;gap:10px;}
+.mc-gift-cell b{font-weight:600;color:var(--mc-ink);}
+.mc-gift-thumb{width:38px;height:38px;border-radius:9px;object-fit:cover;flex:none;background:#f4efe4;}
+.mc-gift-thumb.ph{display:inline-flex;align-items:center;justify-content:center;font-size:17px;color:#c0b09a;}
+.mc-cardno{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;color:var(--mc-ink);}
+.ta-r{text-align:right!important;}
+.mc-tbl td .mc-btn + .mc-btn{margin-left:6px;}
+
+@media (max-width:560px){
+  .mc-adm-stats{grid-template-columns:1fr 1fr;}
+  .mc-adm-head{padding:14px;}
+}
