@@ -86,6 +86,8 @@
       : '<span class="uo-sub-inline">未生成，先填写名称再导出</span>';
     return '<details class="uo-fold"' + (order.anti_code ? '' : ' open') + '>' +
       '<summary>🧾 防伪码信息　' + hint + '</summary>' +
+      '<div id="ordCode_' + order.id + '" class="uo-code-tip">' +
+      (order.anti_code ? '✅ 官方码：' + esc(order.anti_code) : '') + '</div>' +
       '<div class="uo-form">' +
       '<label class="uo-field">产品名称<input id="ordName_' + order.id + '" value="' + esc(order.product_name) + '" placeholder="产品名称"></label>' +
       '<label class="uo-field">专属定制编号<input id="ordBatch_' + order.id + '" value="' + esc(order.order_no) + '" placeholder="专属定制编号"></label>' +
