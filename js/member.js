@@ -206,8 +206,40 @@
       '<button class="mc-btn" onclick="MC.pwd()">🔒 修改密码</button>' +
       '<button class="mc-btn" onclick="MC.logout()">退出</button>' +
       '</div>' +
+      '<div class="mc-sect-title" style="margin-top:16px;">物流提醒</div>' +
+      '<div id="mcLogistics" class="mc-empty">加载中…</div>' +
       '<div class="mc-hint" style="margin-top:14px;">消费 1 元累计 1 积分；积分可在「礼品兑换」中换取礼品。' +
-      '兑换成功后请填写收货信息，客服会尽快安排发货。</div>';
+      '兑换成功后请填写收货信息，客服会尽快安排发货，运单号会出现在上方「物流提醒」。</div>';
+    loadLogistics();
+  }
+
+  /* ---------------- 前台：物流提醒 ---------------- */
+  function loadLogistics() {
+    if (!S.card) return;
+    rpc('mc_my_logistics', { p_login: S.card.card_no, p_hash: S.hash }).then(function (rows) {
+      var box = $('mcLogistics');
+      if (!box) return;
+      if (!rows || !rows.length) {
+        box.className = 'mc-empty';
+        box.textContent = '暂无物流信息，兑换发货后会显示在这里';
+        return;
+      }
+      box.className = '';
+      box.innerHTML = rows.map(function (o) {
+        var shipped = o.status === 'shipped' || !!o.tracking;
+        return '<div class="mc-logi">' +
+          '<div class="mc-logi-i">' + (shipped ? '🚚' : '📦') + '</div>' +
+          '<div class="mc-logi-m"><b>' + esc(o.product || '兑换礼品') + '</b>' +
+          '<span>单号 ' + esc(o.order_no || '') + ' · ' + when(o.created_at) + '</span>' +
+          (o.tracking ? '<span>运单号 <b style="display:inline;color:#1f7a4d;">' + esc(o.tracking) + '</b></span>' : '') +
+          '</div>' +
+          '<span class="mc-logi-tag' + (shipped ? '' : ' wait') + '">' + (shipped ? '已发货' : '待发货') + '</span>' +
+          '</div>';
+      }).join('');
+    }).catch(function (e) {
+      var box2 = $('mcLogistics');
+      if (box2) { box2.className = 'mc-empty'; box2.textContent = e.message; }
+    });
   }
 
   function refreshCard() {
@@ -223,11 +255,13 @@
     if (!S.card) return renderLogin('', '', '');
     openPanel();
     S.view = 'txns';
-    $('mcBody').innerHTML = header('积分明细') + '<div id="mcTxnList" class="mc-empty">加载中…</div>';
+    $('mcBody').innerHTML = header('积分明细') +
+      '<div class="mc-hint" style="margin-bottom:10px;">仅保留最近 <b>5 天</b>的消费与积分记录，更早的记录自动清理。</div>' +
+      '<div id="mcTxnList" class="mc-empty">加载中…</div>';
     rpc('mc_my_txns', { p_login: S.card.card_no, p_hash: S.hash, p_limit: 100 }).then(function (rows) {
       var list = $('mcTxnList');
       if (!list) return;
-      if (!rows || !rows.length) { list.className = 'mc-empty'; list.textContent = '暂无记录，刷卡消费后会自动记录'; return; }
+      if (!rows || !rows.length) { list.className = 'mc-empty'; list.textContent = '最近 5 天暂无记录，刷卡消费后会自动记录'; return; }
       list.className = '';
       list.innerHTML = rows.map(function (t) {
         var plus = num(t.points) > 0, minus = num(t.points) < 0;
@@ -576,7 +610,7 @@
     $('mcAdminBody').innerHTML =
       '<button class="back-btn" onclick="MC.adminOpenCards()">← 返回列表</button>' +
       '<h3 style="font-size:17px;margin-bottom:6px;">会员卡 ' + esc(d.card_no) + '</h3>' +
-      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:12px;">会员卡号不可修改；其余资料可编辑。消费 1 元累计 1 积分。</p>' +
+      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:12px;">消费 1 元累计 1 积分；消费 / 积分记录只保留最近 5 天。卡号可通过「绑定账号」改为该账号手机号。</p>' +
       '<div class="mc-detail-grid">' +
       kv('可用积分', pts(d.points) + ' 分') + kv('账户余额', money(d.balance)) +
       kv('开卡时间', when(d.created_at)) + kv('最近更新', when(d.updated_at)) +
@@ -600,6 +634,19 @@
       '<button class="mc-btn" onclick="MC.adminNfc()">📡 生成 NFC 码</button>' +
       '<button class="mc-btn danger" onclick="MC.adminDelete()">删除会员卡</button>' +
       '</div>' +
+      '<div class="mc-sect-title" style="margin-top:18px;">绑定前台账号</div>' +
+      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:8px;">绑定后该卡的兑换发货通知会同时进入对方「消息中心」；未绑定只记在本卡「物流提醒」。' +
+      '勾选下方选项可把会员卡号改成该账号的手机号（改后旧 NFC 码失效，需重新生成）。</p>' +
+      '<div class="mc-detail-grid">' +
+      '<div><label style="font-size:12px;color:#6b5d4d;">账号用户名（留空解除绑定）</label>' +
+      '<input class="mc-input" id="mcE_Bind" value="' + esc(d.bind_username || '') + '" placeholder="如 zhangsan"></div>' +
+      '<div style="display:flex;align-items:flex-end;padding-bottom:4px;">' +
+      '<label style="font-size:12px;color:#6b5d4d;display:flex;gap:6px;align-items:center;">' +
+      '<input type="checkbox" id="mcE_ToPhone"> 同时把会员卡号改为该账号手机号</label></div>' +
+      '</div>' +
+      '<div class="mc-detail-ops">' +
+      '<button class="mc-btn" onclick="MC.adminBind()">🔗 保存绑定</button>' +
+      '</div>' +
       '<div class="mc-sect-title" style="margin-top:18px;">消费 / 积分记录</div>' +
       '<div id="mcAdminTxn" class="mc-empty">加载中…</div>';
   }
@@ -612,7 +659,7 @@
     rpc('mc_admin_txns', { p_pwd: adminPwd(), p_card_no: cardNo, p_limit: 80 }).then(function (rows) {
       var box = $('mcAdminTxn');
       if (!box) return;
-      if (!rows || !rows.length) { box.className = 'mc-empty'; box.textContent = '暂无记录'; return; }
+      if (!rows || !rows.length) { box.className = 'mc-empty'; box.textContent = '最近 5 天暂无记录'; return; }
       box.className = '';
       box.innerHTML = rows.map(function (t) {
         var plus = num(t.points) > 0, minus = num(t.points) < 0;
@@ -624,6 +671,24 @@
           '<div class="mc-txn-v ' + (plus ? 'plus' : minus ? 'minus' : '') + '">' + esc(v) + '</div></div>';
       }).join('');
     }).catch(function (e) { toast(e.message, 'err'); });
+  }
+
+  function adminBind() {
+    var d = A.detail;
+    if (!d) return;
+    var el = $('mcE_Bind');
+    var user = el ? String(el.value || '').trim() : '';
+    var pick = $('mcE_ToPhone');
+    var toPhone = !!(pick && pick.checked);
+    if (toPhone && !user) {
+      return toast('要改成手机号，请先填账号用户名', 'err');
+    }
+    if (toPhone && !confirm('确定把会员卡号从 ' + d.card_no + ' 改为该账号绑定的手机号吗？\n\n改后旧 NFC 卡需要重新生成。')) return;
+    rpc('mc_admin_bind', { p_pwd: adminPwd(), p_card_no: d.card_no, p_username: user, p_to_phone: toPhone })
+      .then(function (r) {
+        toast(r.card_no !== d.card_no ? '已绑定，卡号改为 ' + r.card_no : '绑定已保存', 'ok');
+        adminOpenCard(r.card_no);
+      }).catch(function (e) { toast(e.message, 'err'); });
   }
 
   function adminSave() {
@@ -853,10 +918,12 @@
     $('mcGiftBody').innerHTML =
       '<button class="back-btn" onclick="MC.backHome()">← 返回</button>' +
       '<h3 style="font-size:17px;margin-bottom:10px;">礼品兑换</h3>' +
-      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:12px;">礼品名称与所需积分即前台兑换页展示的内容；兑换订单在这里发货。</p>' +
+      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:8px;">礼品名称与所需积分即前台兑换页展示的内容。</p>' +
+      '<div class="mc-hint" style="margin-bottom:12px;">积分兑换产生的订单会进入 <b>订单管理 → 待处理订单</b>，与普通商品一样填运单号发货。' +
+      '发货后自动写入会员卡「物流提醒」；绑定了前台账号的，同时发送到对方「消息中心」。</div>' +
       '<div class="mc-admin-bar">' +
       '<button class="mc-btn primary" id="mcGiftTab1" onclick="MC.giftTab(\'list\')">礼品设置</button>' +
-      '<button class="mc-btn" id="mcGiftTab2" onclick="MC.giftTab(\'orders\')">兑换订单</button>' +
+      '<button class="mc-btn" onclick="MC.adminGotoOrders()">前往待处理订单</button>' +
       '<button class="mc-btn" onclick="MC.giftAdd()">＋ 新增礼品</button></div>' +
       '<div id="mcGiftPane"></div>';
     giftTab('list');
@@ -864,11 +931,23 @@
 
   function giftTab(tab) {
     A.giftTab = tab;
-    var b1 = $('mcGiftTab1'), b2 = $('mcGiftTab2');
+    var b1 = $('mcGiftTab1');
     if (b1) b1.className = 'mc-btn' + (tab === 'list' ? ' primary' : '');
-    if (b2) b2.className = 'mc-btn' + (tab === 'orders' ? ' primary' : '');
-    if (tab === 'orders') { loadGiftOrders(A.orderFilter); return; }
+    if (tab === 'orders') {
+      toast('兑换订单已并入「待处理订单」，请在那里填单号发货');
+      adminGotoOrders();
+      return;
+    }
     loadAdminGifts();
+  }
+
+  function adminGotoOrders() {
+    ensureAdminVisible();
+    if (typeof window.openAdminSection === 'function') {
+      window.openAdminSection('secOrders');
+      return;
+    }
+    toast('请从后台首页进入「订单管理 → 待处理订单」');
   }
 
   function loadAdminGifts() {
@@ -1113,6 +1192,7 @@
     pwd: viewPwd,
     adminOpenCards: adminOpenCards,
     adminOpenGifts: adminOpenGifts,
+    adminGotoOrders: adminGotoOrders,
     adminOpenCard: adminOpenCard,
     adminSearch: adminSearch,
     adminRefresh: adminRefresh,
@@ -1121,6 +1201,7 @@
     adminConsume: adminConsume,
     adminPoints: adminPoints,
     adminBalance: adminBalance,
+    adminBind: adminBind,
     adminResetPwd: adminResetPwd,
     adminDelete: adminDelete,
     adminNfc: adminNfc,
