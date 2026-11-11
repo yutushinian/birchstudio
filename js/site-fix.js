@@ -71,9 +71,26 @@
   function guardPushMail() {
     var orig = window.pushMail;
     if (typeof orig !== 'function' || orig.__noTargetGuard) return false;
+    var recent = {};
     var guarded = function (title, body, username) {
       var to = (username === null || username === undefined) ? '' : String(username).trim();
       if (!to) return Promise.resolve(false);
+      // 会员卡兑换单的站内信已由服务端按“当前绑定账号”发送，
+      // 前端可能再发一次；同一收件人 + 同一订单号 5 分钟内只保留第一条。
+      var text = String(title || '') + ' ' + String(body || '');
+      var hit = text.match(/[A-Z]\d{6,}/);
+      var now = Date.now();
+      if (hit) {
+        // 只用「标题前缀 + 订单号」做键：同一条“已发货”不会重复，
+        // 而“订单已完成”是另一个标题，不会被误吞。
+        var prefix = String(title || '').replace(/\s+/g, '').slice(0, 4);
+        var key = to + '|' + prefix + '|' + hit[0];
+        if (recent[key] && now - recent[key] < 300000) return Promise.resolve(false);
+        recent[key] = now;
+        for (var k in recent) {
+          if (now - recent[k] > 300000) delete recent[k];
+        }
+      }
       return orig(title, body, to);
     };
     guarded.__noTargetGuard = true;
