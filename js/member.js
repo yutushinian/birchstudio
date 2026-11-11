@@ -13,7 +13,7 @@
 
   var cli = null, booted = false;
   var S = { card: null, hash: '', view: 'login', gifts: [], nfc: null };
-  var A = { cards: [], gifts: [], orders: [], detail: null, giftTab: 'list', orderFilter: '' };
+  var A = { cards: [], gifts: [], orders: [], detail: null, orderFilter: '' };
 
   /* ---------------- 基础工具 ---------------- */
   function $(id) { return document.getElementById(id); }
@@ -578,25 +578,7 @@
   function mountAdmin() {
     var home = $('adminHome');
     if (!home) return;
-    var grid = home.querySelector('.admin-grid');
-
-    if (grid && !$('mcAdminEntry')) {
-      var c1 = document.createElement('div');
-      c1.className = 'admin-card';
-      c1.id = 'mcAdminEntry';
-      c1.innerHTML = '<div class="admin-card-cover"><span class="admin-chip">💳</span></div>' +
-        '<div class="admin-card-info"><div class="admin-card-name">会员卡管理</div></div>';
-      c1.addEventListener('click', function () { adminOpenCards(); });
-      grid.appendChild(c1);
-
-      var c2 = document.createElement('div');
-      c2.className = 'admin-card';
-      c2.id = 'mcGiftEntry';
-      c2.innerHTML = '<div class="admin-card-cover"><span class="admin-chip">🎁</span></div>' +
-        '<div class="admin-card-info"><div class="admin-card-name">礼品兑换</div></div>';
-      c2.addEventListener('click', function () { adminOpenGifts(); });
-      grid.appendChild(c2);
-    }
+    mountAdminCards(home);
 
     var gen = $('genPanel');
     if (gen && !$('mcAdminSec')) {
@@ -614,6 +596,41 @@
     }
   }
 
+  /** 首页两个入口卡片；站点若重建 .admin-grid，观察器会自动补回 */
+  function mountAdminCards(home) {
+    var grid = home.querySelector('.admin-grid');
+    if (!grid) return;
+    if (!$('mcAdminEntry')) {
+      var c1 = document.createElement('div');
+      c1.className = 'admin-card';
+      c1.id = 'mcAdminEntry';
+      c1.innerHTML = '<div class="admin-card-cover"><span class="admin-chip">💳</span></div>' +
+        '<div class="admin-card-info"><div class="admin-card-name">会员卡管理</div>' +
+        '<div class="admin-card-desc">开卡 / 积分 / 消费 / NFC 码</div></div>';
+      c1.addEventListener('click', function () { adminOpenCards(); });
+      grid.appendChild(c1);
+    }
+    if (!$('mcGiftEntry')) {
+      var c2 = document.createElement('div');
+      c2.className = 'admin-card';
+      c2.id = 'mcGiftEntry';
+      c2.innerHTML = '<div class="admin-card-cover"><span class="admin-chip">🎁</span></div>' +
+        '<div class="admin-card-info"><div class="admin-card-name">礼品兑换</div>' +
+        '<div class="admin-card-desc">积分可兑换的物品</div></div>';
+      c2.addEventListener('click', function () { adminOpenGifts(); });
+      grid.appendChild(c2);
+    }
+    if (!home.getAttribute('data-mc-watch')) {
+      home.setAttribute('data-mc-watch', '1');
+      try {
+        var mo = new MutationObserver(function () { mountAdminCards(home); });
+        mo.observe(home, { childList: true, subtree: true });
+      } catch (e) {
+        // 老浏览器没有 MutationObserver 时忽略，入口已按正常流程插入
+      }
+    }
+  }
+
   function adminPwd() {
     var p = '';
     try { p = sessionStorage.getItem('birch_admin_pwd') || ''; } catch (e) {}
@@ -627,15 +644,28 @@
     A.detail = null;
     $('mcAdminBody').innerHTML =
       '<button class="back-btn" onclick="MC.backHome()">← 返回</button>' +
-      '<h3 style="font-size:17px;margin-bottom:10px;">会员卡管理</h3>' +
-      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:12px;">会员卡号与登录账号相互独立；初始密码 123456。删除会员卡不可恢复。</p>' +
-      '<div class="mc-admin-bar"><input class="mc-input" id="mcKw" placeholder="搜卡号 / 账号 / 昵称 / 手机" style="max-width:240px;">' +
-      '<button class="mc-btn" onclick="MC.adminSearch()">搜索</button>' +
-      '<button class="mc-btn primary" onclick="MC.adminNew()">＋ 新建会员卡</button>' +
-      '<button class="mc-btn" onclick="MC.adminRefresh()">刷新</button></div>' +
+      '<div class="mc-adm-head">' +
+      '<div class="mc-adm-head-i">💳</div>' +
+      '<div class="mc-adm-head-t"><h3>会员卡管理</h3>' +
+      '<p>会员卡号与登录账号相互独立，初始密码 123456；点任意一行查看详情、消费、积分与 NFC 码。删除会员卡不可恢复。</p></div>' +
+      '</div>' +
+      '<div class="mc-adm-stats">' +
+      '<div class="mc-adm-stat"><span>会员卡</span><b id="mcStCards">—</b><i>张</i></div>' +
+      '<div class="mc-adm-stat"><span>可用积分合计</span><b id="mcStPoints">—</b><i>分</i></div>' +
+      '<div class="mc-adm-stat"><span>账户余额合计</span><b id="mcStBalance">—</b></div>' +
+      '</div>' +
+      '<div class="mc-adm-card">' +
+      '<div class="mc-adm-card-h">' +
+      '<input class="mc-input mc-adm-search" id="mcKw" placeholder="搜卡号 / 账号 / 昵称 / 手机">' +
+      '<div class="mc-adm-card-ops">' +
+      '<button class="mc-btn sm" onclick="MC.adminSearch()">搜索</button>' +
+      '<button class="mc-btn primary sm" onclick="MC.adminNew()">＋ 新建会员卡</button>' +
+      '<button class="mc-btn sm" onclick="MC.adminRefresh()">刷新</button>' +
+      '</div></div>' +
       '<div class="mc-tbl-wrap"><table class="mc-tbl"><thead><tr>' +
-      '<th>会员卡号</th><th>登录账号</th><th>昵称</th><th>手机</th><th>积分</th><th>余额</th><th>状态</th></tr></thead>' +
-      '<tbody id="mcCardRows"><tr><td colspan="7">加载中…</td></tr></tbody></table></div>';
+      '<th>会员卡号</th><th>登录账号</th><th>昵称</th><th>手机</th><th class="num">积分</th><th class="num">余额</th><th>状态</th></tr></thead>' +
+      '<tbody id="mcCardRows"><tr><td colspan="7">加载中…</td></tr></tbody></table></div>' +
+      '</div>';
     $('mcKw').addEventListener('keydown', function (e) { if (e.key === 'Enter') adminSearch(); });
     loadAdminCards('');
   }
@@ -651,12 +681,26 @@
   }
 
   function paintAdminCards() {
+    var sumPts = 0, sumBal = 0;
+    for (var i = 0; i < A.cards.length; i++) {
+      sumPts += num(A.cards[i].points);
+      sumBal += num(A.cards[i].balance);
+    }
+    var elC = $('mcStCards'), elP = $('mcStPoints'), elB = $('mcStBalance');
+    if (elC) elC.textContent = String(A.cards.length);
+    if (elP) elP.textContent = pts(sumPts);
+    if (elB) elB.textContent = money(sumBal);
+
     var tb = $('mcCardRows');
     if (!tb) return;
-    if (!A.cards.length) { tb.innerHTML = '<tr><td colspan="7">还没有会员卡，点「新建会员卡」发卡</td></tr>'; return; }
+    if (!A.cards.length) {
+      tb.innerHTML = '<tr><td colspan="7"><div class="mc-adm-empty"><div class="mc-adm-empty-i">💳</div>' +
+        '<b>还没有会员卡</b><p>点上方「＋ 新建会员卡」发第一张卡。</p></div></td></tr>';
+      return;
+    }
     tb.innerHTML = A.cards.map(function (c) {
       return '<tr data-no="' + esc(c.card_no) + '">' +
-        '<td>' + esc(c.card_no) + '</td><td>' + esc(c.login_id) + '</td>' +
+        '<td><span class="mc-cardno">' + esc(c.card_no) + '</span></td><td>' + esc(c.login_id) + '</td>' +
         '<td>' + esc(c.nickname || '—') + '</td><td>' + esc(c.phone || '—') + '</td>' +
         '<td class="num">' + pts(c.points) + '</td><td class="num">' + money(c.balance) + '</td>' +
         '<td><span class="mc-badge ' + (c.status === 'active' ? '' : 'off') + '">' +
@@ -688,8 +732,11 @@
     if (!d) return;
     $('mcAdminBody').innerHTML =
       '<button class="back-btn" onclick="MC.adminOpenCards()">← 返回列表</button>' +
-      '<h3 style="font-size:17px;margin-bottom:6px;">会员卡 ' + esc(d.card_no) + '</h3>' +
-      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:12px;">消费 1 元累计 1 积分；消费 / 积分记录只保留最近 5 天。卡号可通过「绑定账号」改为该账号手机号。</p>' +
+      '<div class="mc-adm-head">' +
+      '<div class="mc-adm-head-i">👤</div>' +
+      '<div class="mc-adm-head-t"><h3>会员卡 ' + esc(d.card_no) + '</h3>' +
+      '<p>消费 1 元累计 1 积分；消费 / 积分记录只保留最近 5 天。卡号可通过「绑定账号」改为该账号手机号，改号后旧 NFC 码失效。</p></div>' +
+      '</div>' +
       '<div class="mc-detail-grid">' +
       kv('可用积分', pts(d.points) + ' 分') + kv('账户余额', money(d.balance)) +
       kv('开卡时间', when(d.created_at)) + kv('最近更新', when(d.updated_at)) +
@@ -728,7 +775,7 @@
       '<button class="mc-btn" onclick="MC.adminBind()">🔗 保存绑定</button>' +
       '</div>' +
       '<div class="mc-sect-title" style="margin-top:18px;">消费 / 积分记录</div>' +
-      '<div id="mcAdminTxn" class="mc-empty">加载中…</div>';
+      '<div class="mc-adm-card"><div id="mcAdminTxn" class="mc-empty">加载中…</div></div>';
   }
 
   function kv(k, v) {
@@ -997,21 +1044,26 @@
     showAdminSection('mcGiftSec');
     $('mcGiftBody').innerHTML =
       '<button class="back-btn" onclick="MC.backHome()">← 返回</button>' +
-      '<h3 style="font-size:17px;margin-bottom:10px;">礼品兑换</h3>' +
-      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:8px;">礼品名称与所需积分即前台兑换页展示的内容。</p>' +
-      '<div class="mc-hint" style="margin-bottom:12px;">积分兑换产生的订单统一进入 <b>订单管理 → 待处理订单</b>，与普通商品一样填运单号发货；' +
+      '<div class="mc-adm-head">' +
+      '<div class="mc-adm-head-i">🎁</div>' +
+      '<div class="mc-adm-head-t"><h3>积分可兑换的物品</h3>' +
+      '<p>这里维护的清单就是前台「礼品兑换」页展示的内容：名称、所需积分、库存、图片与上架状态，改完前台立即生效。</p></div>' +
+      '</div>' +
+      '<div class="mc-adm-note">积分兑换产生的订单统一进入 <b>订单管理 → 待处理订单</b>，与普通商品一样填运单号发货；' +
       '发货后自动写入会员卡「物流提醒」，绑定了前台账号的还会通知对方消息中心。</div>' +
-      '<div class="mc-admin-bar">' +
-      '<button class="mc-btn primary" id="mcGiftTab1" onclick="MC.giftTab(\'list\')">礼品设置</button>' +
-      '<button class="mc-btn" onclick="MC.giftAdd()">＋ 新增礼品</button></div>' +
-      '<div id="mcGiftPane"></div>';
-    giftTab('list');
+      '<div class="mc-adm-card">' +
+      '<div class="mc-adm-card-h">' +
+      '<span class="mc-adm-card-t" id="mcGiftCount">积分可兑换的物品</span>' +
+      '<div class="mc-adm-card-ops">' +
+      '<button class="mc-btn primary sm" onclick="MC.giftAdd()">＋ 新增礼品</button>' +
+      '<button class="mc-btn sm" onclick="MC.giftRefresh()">刷新</button>' +
+      '</div></div>' +
+      '<div id="mcGiftPane" class="mc-adm-pane"></div>' +
+      '</div>';
+    loadAdminGifts();
   }
 
-  function giftTab(tab) {
-    A.giftTab = tab;
-    var b1 = $('mcGiftTab1');
-    if (b1) b1.className = 'mc-btn' + (tab === 'list' ? ' primary' : '');
+  function giftRefresh() {
     loadAdminGifts();
   }
 
@@ -1025,27 +1077,47 @@
   }
 
   function loadAdminGifts() {
-    $('mcGiftPane').innerHTML = '<div class="mc-empty">加载中…</div>';
+    var pane = $('mcGiftPane');
+    if (!pane) return;
+    pane.innerHTML = '<div class="mc-empty">加载中…</div>';
     rpc('gift_admin_list', { p_pwd: adminPwd() }).then(function (rows) {
       A.gifts = rows || [];
-      if (!A.gifts.length) { $('mcGiftPane').innerHTML = '<div class="mc-empty">还没有礼品，点「新增礼品」添加</div>'; return; }
-      $('mcGiftPane').innerHTML = '<div class="mc-tbl-wrap"><table class="mc-tbl"><thead><tr>' +
-        '<th>礼品名称</th><th>所需积分</th><th>库存</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+      var on = 0;
+      for (var i = 0; i < A.gifts.length; i++) if (A.gifts[i].active) on++;
+      var cnt = $('mcGiftCount');
+      if (cnt) cnt.textContent = '积分可兑换的物品 · 共 ' + A.gifts.length + ' 件，上架 ' + on + ' 件';
+      if (!A.gifts.length) {
+        pane.innerHTML = '<div class="mc-adm-empty"><div class="mc-adm-empty-i">🎁</div>' +
+          '<b>还没有可兑换的物品</b>' +
+          '<p>点右上角「＋ 新增礼品」添加，保存后前台会员就能用积分兑换。</p>' +
+          '<button class="mc-btn primary" onclick="MC.giftAdd()">＋ 新增第一个礼品</button></div>';
+        return;
+      }
+      pane.innerHTML = '<div class="mc-tbl-wrap"><table class="mc-tbl mc-tbl-gift"><thead><tr>' +
+        '<th>物品</th><th>所需积分</th><th>库存</th><th>状态</th><th class="ta-r">操作</th></tr></thead><tbody>' +
         A.gifts.map(function (g) {
-          return '<tr><td>' + esc(g.name) + '</td><td class="num">' + pts(g.points_cost) + '</td>' +
-            '<td>' + (g.stock == null ? '不限' : g.stock) + '</td>' +
+          var thumb = g.image_url
+            ? '<img class="mc-gift-thumb" src="' + esc(g.image_url) + '" alt="">'
+            : '<span class="mc-gift-thumb ph">🎁</span>';
+          var stock;
+          if (g.stock == null) stock = '<span class="mc-badge off">不限</span>';
+          else if (Number(g.stock) <= 0) stock = '<span class="mc-badge warn">已兑完</span>';
+          else stock = String(g.stock);
+          return '<tr><td><div class="mc-gift-cell">' + thumb + '<b>' + esc(g.name) + '</b></div></td>' +
+            '<td class="num">' + pts(g.points_cost) + ' 分</td>' +
+            '<td>' + stock + '</td>' +
             '<td><span class="mc-badge ' + (g.active ? '' : 'off') + '">' + (g.active ? '上架' : '下架') + '</span></td>' +
-            '<td><button class="mc-btn sm" data-edit="' + g.id + '">编辑</button> ' +
+            '<td class="ta-r"><button class="mc-btn sm" data-edit="' + g.id + '">编辑</button>' +
             '<button class="mc-btn sm danger" data-del="' + g.id + '">删除</button></td></tr>';
         }).join('') + '</tbody></table></div>';
-      $('mcGiftPane').onclick = function (e) {
+      pane.onclick = function (e) {
         var t = e.target;
         if (!t.getAttribute) return;
         var ed = t.getAttribute('data-edit'), del = t.getAttribute('data-del');
         if (ed) giftEdit(Number(ed));
         if (del) giftDelete(Number(del), t);
       };
-    }).catch(function (e) { $('mcGiftPane').innerHTML = '<div class="mc-empty">' + esc(e.message) + '</div>'; });
+    }).catch(function (e) { pane.innerHTML = '<div class="mc-empty">' + esc(e.message) + '</div>'; });
   }
 
   function giftEdit(id) {
@@ -1065,7 +1137,6 @@
   }
 
   function giftAdd() {
-    if (A.giftTab !== 'list') giftTab('list');
     openModal('<h3>新增礼品</h3>' +
       '<div class="mc-field"><label>礼品名称</label><input class="mc-input" id="mcG_Name" placeholder="如：白桦定制书签"></div>' +
       '<div class="mc-row"><div class="mc-field"><label>所需积分</label><input class="mc-input" id="mcG_Pts" value="100" inputmode="decimal"></div>' +
@@ -1223,7 +1294,7 @@
     adminNfc: adminNfc,
     copyNfc: copyNfc,
     setVal: setVal,
-    giftTab: giftTab,
+    giftRefresh: giftRefresh,
     giftAdd: giftAdd,
     doBind: doBind,
     unbind: unbind,
