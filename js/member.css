@@ -199,3 +199,13 @@ textarea.mc-input { min-height: 68px; resize: vertical; }
   .mc-body { padding: 16px 14px 30px; }
   .mc-cv-no { font-size: 18px; }
 }
+
+/* 物流提醒（前台会员卡首页） */
+.mc-logi{display:flex;gap:10px;align-items:flex-start;padding:10px 2px;border-bottom:1px solid #f0e7d9;}
+.mc-logi:last-child{border-bottom:none;}
+.mc-logi-i{font-size:18px;line-height:1.1;flex:none;}
+.mc-logi-m{flex:1;min-width:0;}
+.mc-logi-m b{display:block;font-size:13px;color:#3d3229;font-weight:600;margin-bottom:2px;}
+.mc-logi-m span{display:block;font-size:11px;color:#8b7a63;line-height:1.55;word-break:break-all;}
+.mc-logi-tag{flex:none;font-size:11px;padding:2px 7px;border-radius:6px;background:#f0fbf4;color:#1f7a4d;white-space:nowrap;}
+.mc-logi-tag.wait{background:#fdf4e3;color:#a8791f;}
