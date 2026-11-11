@@ -208,9 +208,88 @@
       '</div>' +
       '<div class="mc-sect-title" style="margin-top:16px;">物流提醒</div>' +
       '<div id="mcLogistics" class="mc-empty">加载中…</div>' +
+      '<div class="mc-sect-title" style="margin-top:16px;">账号绑定</div>' +
+      '<div id="mcBindBox" class="mc-empty">加载中…</div>' +
       '<div class="mc-hint" style="margin-top:14px;">消费 1 元累计 1 积分；积分可在「礼品兑换」中换取礼品。' +
       '兑换成功后请填写收货信息，客服会尽快安排发货，运单号会出现在上方「物流提醒」。</div>';
     loadLogistics();
+    renderBindBox();
+  }
+
+  /* ---------------- 前台：账号绑定 ---------------- */
+  function renderBindBox() {
+    var box = $('mcBindBox');
+    if (!box || !S.card) return;
+    var user = S.card.bind_username || '';
+    if (user) {
+      box.className = '';
+      box.innerHTML =
+        '<div class="mc-bind">' +
+        '<div class="mc-bind-h"><b>已绑定账号</b><span class="mc-badge">' + esc(user) + '</span></div>' +
+        '<div class="mc-bind-t">兑换发货通知会同时发送到该账号的「消息中心」，本卡「物流提醒」也一直保留。' +
+        '如需换绑或解绑，直接在下方操作即可。</div>' +
+        '<div class="mc-actions" style="margin-top:8px;">' +
+        '<button class="mc-btn" onclick="MC.bindToPhone()">📱 卡号改为该账号手机号</button>' +
+        '<button class="mc-btn danger" onclick="MC.unbind()">解除绑定</button></div>' +
+        '</div>';
+      return;
+    }
+    box.className = '';
+    box.innerHTML =
+      '<div class="mc-bind">' +
+      '<div class="mc-bind-h"><b>绑定网站账号</b><span class="mc-badge off">未绑定</span></div>' +
+      '<div class="mc-bind-t">绑定后兑换发货会同时通知该账号；不绑定则只记在本卡「物流提醒」。</div>' +
+      '<div class="mc-field"><label>网站账号（用户名或手机号）</label>' +
+      '<input class="mc-input" id="mcBindUser" placeholder="如 zhangsan 或 13800000000" autocomplete="username"></div>' +
+      '<div class="mc-field"><label style="display:flex;gap:6px;align-items:center;font-size:13px;">' +
+      '<input type="checkbox" id="mcBindToPhone"> 同时把会员卡号改为该账号的手机号</label></div>' +
+      '<div class="mc-actions"><button class="mc-btn primary" id="mcBindOk" onclick="MC.doBind()">🔗 绑定账号</button></div>' +
+      '<div class="mc-hint" style="margin-top:8px;">改卡号后旧 NFC 标签会失效，需要在后台重新生成 NFC 码。</div>' +
+      '</div>';
+  }
+
+  function bindCard(user, toPhone, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '处理中…'; }
+    return rpc('mc_self_bind', {
+      p_login: S.card.card_no, p_hash: S.hash,
+      p_username: user || '', p_to_phone: !!toPhone
+    }).then(function (r) {
+      S.card.card_no = r.card_no;
+      S.card.bind_username = r.bind_username || '';
+      S.hash = r.auth_hash || S.hash;
+      try {
+        sessionStorage.setItem(SS_CARD, JSON.stringify({
+          card_no: S.card.card_no, login_id: S.card.login_id, hash: S.hash
+        }));
+      } catch (e) {}
+      var changed = r.old_card_no && r.old_card_no !== r.card_no;
+      toast(changed ? '已绑定，卡号改为 ' + r.card_no : (r.bind_username ? '已绑定账号 ' + r.bind_username : '已解除绑定'), 'ok');
+      renderHome();
+    }).catch(function (e) {
+      if (btn) { btn.disabled = false; btn.textContent = '🔗 绑定账号'; }
+      toast(e.message, 'err');
+    });
+  }
+
+  function doBind() {
+    var el = $('mcBindUser');
+    var user = el ? String(el.value || '').trim() : '';
+    var pick = $('mcBindToPhone');
+    var toPhone = !!(pick && pick.checked);
+    if (!user) return toast('请填写要绑定的账号', 'err');
+    if (toPhone && !confirm('确定把会员卡号从 ' + S.card.card_no + ' 改为该账号的手机号吗？\n\n改后旧 NFC 卡需要重新生成。')) return;
+    bindCard(user, toPhone, $('mcBindOk'));
+  }
+
+  function unbind() {
+    if (!confirm('确定解除绑定吗？解除后发货通知只留在本卡「物流提醒」。')) return;
+    bindCard('', false, null);
+  }
+
+  function bindToPhone() {
+    if (!S.card.bind_username) return toast('请先绑定账号', 'err');
+    if (!confirm('确定把会员卡号改为「' + S.card.bind_username + '」的手机号吗？\n\n改后旧 NFC 卡需要重新生成。')) return;
+    bindCard(S.card.bind_username, true, null);
   }
 
   /* ---------------- 前台：物流提醒 ---------------- */
@@ -635,7 +714,8 @@
       '<button class="mc-btn danger" onclick="MC.adminDelete()">删除会员卡</button>' +
       '</div>' +
       '<div class="mc-sect-title" style="margin-top:18px;">绑定前台账号</div>' +
-      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:8px;">绑定后该卡的兑换发货通知会同时进入对方「消息中心」；未绑定只记在本卡「物流提醒」。' +
+      '<p style="font-size:12px;color:#6b5d4d;margin-bottom:8px;">会员可在前台会员卡界面自助绑定 / 解绑；这里留给管理员代绑。' +
+      '绑定后该卡的兑换发货通知会同时进入对方「消息中心」；未绑定只记在本卡「物流提醒」。' +
       '勾选下方选项可把会员卡号改成该账号的手机号（改后旧 NFC 码失效，需重新生成）。</p>' +
       '<div class="mc-detail-grid">' +
       '<div><label style="font-size:12px;color:#6b5d4d;">账号用户名（留空解除绑定）</label>' +
@@ -919,11 +999,10 @@
       '<button class="back-btn" onclick="MC.backHome()">← 返回</button>' +
       '<h3 style="font-size:17px;margin-bottom:10px;">礼品兑换</h3>' +
       '<p style="font-size:12px;color:#6b5d4d;margin-bottom:8px;">礼品名称与所需积分即前台兑换页展示的内容。</p>' +
-      '<div class="mc-hint" style="margin-bottom:12px;">积分兑换产生的订单会进入 <b>订单管理 → 待处理订单</b>，与普通商品一样填运单号发货。' +
-      '发货后自动写入会员卡「物流提醒」；绑定了前台账号的，同时发送到对方「消息中心」。</div>' +
+      '<div class="mc-hint" style="margin-bottom:12px;">积分兑换产生的订单统一进入 <b>订单管理 → 待处理订单</b>，与普通商品一样填运单号发货；' +
+      '发货后自动写入会员卡「物流提醒」，绑定了前台账号的还会通知对方消息中心。</div>' +
       '<div class="mc-admin-bar">' +
       '<button class="mc-btn primary" id="mcGiftTab1" onclick="MC.giftTab(\'list\')">礼品设置</button>' +
-      '<button class="mc-btn" onclick="MC.adminGotoOrders()">前往待处理订单</button>' +
       '<button class="mc-btn" onclick="MC.giftAdd()">＋ 新增礼品</button></div>' +
       '<div id="mcGiftPane"></div>';
     giftTab('list');
@@ -933,11 +1012,6 @@
     A.giftTab = tab;
     var b1 = $('mcGiftTab1');
     if (b1) b1.className = 'mc-btn' + (tab === 'list' ? ' primary' : '');
-    if (tab === 'orders') {
-      toast('兑换订单已并入「待处理订单」，请在那里填单号发货');
-      adminGotoOrders();
-      return;
-    }
     loadAdminGifts();
   }
 
@@ -1025,64 +1099,6 @@
     btn.disabled = true;
     rpc('gift_admin_delete', { p_pwd: adminPwd(), p_id: id }).then(function () {
       toast('礼品已删除', 'ok'); loadAdminGifts();
-    }).catch(function (e) { btn.disabled = false; toast(e.message, 'err'); });
-  }
-
-  function loadGiftOrders(status) {
-    A.orderFilter = status || '';
-    $('mcGiftPane').innerHTML =
-      '<div class="mc-admin-bar">' +
-      tabBtn('待发货', 'pending') + tabBtn('已发货', 'shipped') + tabBtn('全部', '') +
-      '<button class="mc-btn sm" onclick="MC.giftTab(\'orders\')">刷新</button></div>' +
-      '<div id="mcOrderPane" class="mc-empty">加载中…</div>';
-    rpc('gift_admin_orders', { p_pwd: adminPwd(), p_status: A.orderFilter }).then(function (rows) {
-      var box = $('mcOrderPane');
-      if (!rows || !rows.length) { box.className = 'mc-empty'; box.textContent = '暂无兑换订单'; return; }
-      box.className = '';
-      box.innerHTML = '<div class="mc-tbl-wrap"><table class="mc-tbl"><thead><tr>' +
-        '<th>订单号</th><th>礼品</th><th>积分</th><th>会员卡</th><th>收货信息</th><th>状态</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
-        rows.map(function (o) {
-          var st = o.status === 'pending' ? '<span class="mc-badge warn">待发货</span>'
-            : o.status === 'shipped' ? '<span class="mc-badge">已发货</span>'
-            : o.status === 'done' ? '<span class="mc-badge">已完成</span>'
-            : '<span class="mc-badge off">已取消</span>';
-          return '<tr><td>' + esc(o.order_no) + '</td><td>' + esc(o.gift_name) + '</td>' +
-            '<td class="num">' + pts(o.points_cost) + '</td><td>' + esc(o.card_no) + '</td>' +
-            '<td style="white-space:normal;max-width:260px;">' + esc(o.nickname) + '　' + esc(o.phone) + '<br>' +
-            '<span style="color:#6b5d4d;font-size:12px;">' + esc(o.address) + '</span>' +
-            (o.tracking_no ? '<br><span style="font-size:12px;">运单：' + esc(o.tracking_no) + '</span>' : '') + '</td>' +
-            '<td>' + st + '</td><td>' + when(o.created_at) + '</td>' +
-            '<td>' + (o.status === 'pending'
-              ? '<button class="mc-btn sm primary" data-ship="' + o.id + '">发货</button>'
-              : '<button class="mc-btn sm" data-done="' + o.id + '">完成</button>') + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
-      box.onclick = function (e) {
-        var t = e.target;
-        if (!t.getAttribute) return;
-        var ship = t.getAttribute('data-ship'), done = t.getAttribute('data-done');
-        if (ship) shipOrder(Number(ship));
-        if (done) doneOrder(Number(done), t);
-      };
-    }).catch(function (e) { $('mcOrderPane').innerHTML = '<div class="mc-empty">' + esc(e.message) + '</div>'; });
-  }
-
-  function tabBtn(label, val) {
-    var on = (A.orderFilter || '') === val;
-    return '<button class="mc-btn sm' + (on ? ' primary' : '') + '" onclick="MC.giftOrders(\'' + val + '\')">' + label + '</button>';
-  }
-
-  function shipOrder(id) {
-    var tr = window.prompt('请输入运单号（可留空，之后再补）', '');
-    if (tr === null) return;
-    rpc('gift_admin_ship', { p_pwd: adminPwd(), p_id: id, p_tracking: tr.trim() }).then(function () {
-      toast('已标记发货', 'ok'); loadGiftOrders(A.orderFilter);
-    }).catch(function (e) { toast(e.message, 'err'); });
-  }
-
-  function doneOrder(id, btn) {
-    btn.disabled = true;
-    rpc('gift_admin_status', { p_pwd: adminPwd(), p_id: id, p_status: 'done' }).then(function () {
-      toast('订单已完成', 'ok'); loadGiftOrders(A.orderFilter);
     }).catch(function (e) { btn.disabled = false; toast(e.message, 'err'); });
   }
 
@@ -1208,8 +1224,10 @@
     copyNfc: copyNfc,
     setVal: setVal,
     giftTab: giftTab,
-    giftOrders: function (s) { A.orderFilter = s || ''; giftTab('orders'); },
     giftAdd: giftAdd,
+    doBind: doBind,
+    unbind: unbind,
+    bindToPhone: bindToPhone,
     backHome: function () {
       if (typeof window.backToAdminHome === 'function') { window.backToAdminHome(); return; }
       if (typeof window.goBackAdmin === 'function') { window.goBackAdmin(); return; }
