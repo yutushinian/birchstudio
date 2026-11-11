@@ -259,3 +259,6 @@ textarea.mc-input { min-height: 68px; resize: vertical; }
   .mc-adm-stats{grid-template-columns:1fr 1fr;}
   .mc-adm-head{padding:14px;}
 }
+
+/* ===== 后台：NFC 短码展示 ===== */
+.mc-nfc-code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:26px;font-weight:700;letter-spacing:5px;text-align:center;color:var(--mc-ink);background:#fdf8ec;border:1px dashed #e3d3ad;border-radius:12px;padding:14px 10px;margin:12px 0;}
