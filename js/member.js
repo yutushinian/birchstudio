@@ -513,15 +513,31 @@
       var m = new RegExp('[?&#]' + k + '=([^&]*)').exec(raw);
       return m ? decodeURIComponent(m[1].replace(/\+/g, '%20')) : '';
     }
-    var card = pick('mc'), key = pick('k');
+    var card = pick('mc'), key = pick('k'), code = pick('c');
+    if (code) return { card: card || '', key: '', code: code };
     if (!card) return null;
-    return { card: card, key: key };
+    return { card: card, key: key, code: '' };
   }
   function cleanUrl() {
     try { history.replaceState(null, '', location.pathname); } catch (e) {}
   }
 
   function handleNfc(n) {
+    if (n.code) {
+      openPanel();
+      $('mcBody').innerHTML = '<div class="mc-empty">正在读取会员卡…</div>';
+      rpc('mc_nfc_open', { p_code: n.code }).then(function (d) {
+        n.card = d.card_no;
+        resolveNfc(n, d);
+      }).catch(function (e) {
+        renderLogin('', 'NFC 码无效或已失效（可能修改过密码），请在后台重新生成 NFC 码', e.message);
+      });
+      return;
+    }
+    resolveNfc(n, null);
+  }
+
+  function resolveNfc(n, ready) {
     var us = null;
     try { us = JSON.parse(localStorage.getItem('birch_user') || 'null'); } catch (e) { us = null; }
     var pre = (us && us.username)
@@ -537,12 +553,17 @@
         }
         if (pwd) { adminOpenCardFromNfc(n.card); return; }
       }
-      frontNfc(n);
+      frontNfc(n, ready);
     });
   }
 
-  function frontNfc(n) {
+  function frontNfc(n, ready) {
     openPanel();
+    if (ready) {
+      applyCard(ready);
+      toast('NFC 会员卡已识别：' + ready.card_no, 'ok');
+      return;
+    }
     $('mcBody').innerHTML = '<div class="mc-empty">正在读取会员卡…</div>';
     if (!n.key) {
       renderLogin(n.card, '请输入该会员卡的密码', '');
@@ -740,6 +761,7 @@
       '<div class="mc-detail-grid">' +
       kv('可用积分', pts(d.points) + ' 分') + kv('账户余额', money(d.balance)) +
       kv('开卡时间', when(d.created_at)) + kv('最近更新', when(d.updated_at)) +
+      kv('NFC 短码', d.nfc_code ? d.nfc_code + '（9 位 / 45 bit）' : '未生成') +
       '</div><div class="mc-gap"></div>' +
       '<div class="mc-detail-grid">' +
       '<div><label style="font-size:12px;color:#6b5d4d;">会员卡号（只读）</label><input class="mc-input" value="' + esc(d.card_no) + '" readonly></div>' +
@@ -1004,20 +1026,46 @@
 
   function adminNfc() {
     var d = A.detail; if (!d) return;
-    var payload = SITE + '/#mc=' + encodeURIComponent(d.card_no) + '&k=' + encodeURIComponent(d.nfc_hash || '');
+    if (d.nfc_code) { paintNfcModal(d, d.nfc_code); return; }
     openModal('<h3>NFC 码 · ' + esc(d.card_no) + '</h3>' +
-      '<div class="mc-hint">把下面这段写入 NFC 标签（NDEF 选「URI / 网址」类型，或纯文本），' +
-      '刷卡后即可免密进入该会员卡。标签等同于密码，请勿外传；会员自行改密后此码自动失效。</div>' +
+      '<div class="mc-empty">正在生成短码…</div>');
+    rpc('mc_nfc_code', { p_pwd: adminPwd(), p_card_no: d.card_no }).then(function (r) {
+      d.nfc_code = r.nfc_code;
+      paintNfcModal(d, r.nfc_code);
+    }).catch(function (e) {
+      openModal('<h3>NFC 码 · ' + esc(d.card_no) + '</h3>' +
+        '<div class="mc-empty" style="color:#c25c5c;">' + esc(e.message) + '</div>' +
+        '<div class="mc-row"><button class="mc-btn primary" onclick="MC.closeModal()">关闭</button></div>');
+    });
+  }
+
+  function paintNfcModal(d, code) {
+    var payload = SITE + '/#c=' + encodeURIComponent(code);
+    openModal('<h3>NFC 码 · ' + esc(d.card_no) + '</h3>' +
+      '<div class="mc-nfc-code">' + esc(code) + '</div>' +
+      '<div class="mc-hint">把下面这段写入 NFC 标签。短码 9 位（45 bit），链接共 ' + payload.length +
+      ' 字节；URI + 文本双记录合计约 82 字节，NTAG213 也能装下。</div>' +
       '<div class="mc-field" style="margin-top:12px;"><label>NFC 内容</label>' +
-      '<textarea class="mc-input" id="mcNfcText" readonly style="min-height:84px;">' + esc(payload) + '</textarea></div>' +
+      '<textarea class="mc-input" id="mcNfcText" readonly style="min-height:64px;">' + esc(payload) + '</textarea></div>' +
       '<div id="mcQr" style="text-align:center;margin:10px 0;"></div>' +
       '<div class="mc-row"><button class="mc-btn" onclick="MC.copyNfc()">复制内容</button>' +
+      '<button class="mc-btn" onclick="MC.copyNfcCode(\'' + esc(code) + '\')">复制短码</button>' +
       '<button class="mc-btn primary" onclick="MC.closeModal()">完成</button></div>' +
-      '<div class="mc-hint" id="mcCopyTip" style="margin-top:8px;min-height:16px;"></div>');
+      '<div class="mc-hint" id="mcCopyTip" style="margin-top:8px;min-height:16px;"></div>' +
+      '<div class="mc-hint warn" style="margin-top:8px;">会员修改密码或管理员重置密码后，此短码立即失效，需重新生成。</div>');
     var box = $('mcQr');
     try {
-      if (window.QRCode && box) { new window.QRCode(box, { text: payload, width: 170, height: 170 }); }
+      if (window.QRCode && box) { new window.QRCode(box, { text: payload, width: 150, height: 150 }); }
     } catch (e) {}
+  }
+
+  function copyNfcCode(code) {
+    function done() { var t = $('mcCopyTip'); if (t) t.textContent = '短码已复制：' + code; }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(done).catch(done);
+      } else { done(); }
+    } catch (e) { done(); }
   }
 
   function copyNfc() {
@@ -1293,6 +1341,7 @@
     adminDelete: adminDelete,
     adminNfc: adminNfc,
     copyNfc: copyNfc,
+    copyNfcCode: copyNfcCode,
     setVal: setVal,
     giftRefresh: giftRefresh,
     giftAdd: giftAdd,
