@@ -209,7 +209,7 @@
       '<div class="uo-sum"><span>共 <b>' + all.length + '</b> 单</span>' +
       '<span class="uo-sep"></span><span>待处理 <b>' + pendingCount + '</b></span>' +
       '<span class="uo-sep"></span><span>已发货 <b>' + shippedCount + '</b></span>' +
-      '<span style="margin-left:auto;"><b id="mergeSelInfo">已选 0 单</b></span>' +
+      '<span style="margin-left:auto;color:#a8a196;">勾选后可合并 / 批量操作</span>' +
       '</div>';
 
     if (!list.length) {
@@ -219,6 +219,11 @@
     }
 
     wrap.innerHTML = bar + list.map(card).join('');
+
+    // 勾选数量由页面原有的 #mergeSelInfo 显示，重绘后同步一次
+    if (typeof updateMergeSel === 'function') {
+      updateMergeSel();
+    }
   }
 
   /* ---------- 撤回待处理：优先 recall_order ---------- */
