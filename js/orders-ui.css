@@ -517,3 +517,14 @@
     order: 9;
   }
 }
+
+#ordersListWrap .uo-code-tip {
+  padding: 0 12px 8px;
+  font-size: 12px;
+  color: var(--green-main);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+#ordersListWrap .uo-code-tip:empty {
+  display: none;
+}
