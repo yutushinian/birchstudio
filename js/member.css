@@ -209,3 +209,10 @@ textarea.mc-input { min-height: 68px; resize: vertical; }
 .mc-logi-m span{display:block;font-size:11px;color:#8b7a63;line-height:1.55;word-break:break-all;}
 .mc-logi-tag{flex:none;font-size:11px;padding:2px 7px;border-radius:6px;background:#f0fbf4;color:#1f7a4d;white-space:nowrap;}
 .mc-logi-tag.wait{background:#fdf4e3;color:#a8791f;}
+
+/* 账号绑定（前台会员卡首页） */
+.mc-bind{padding:12px 14px;border:1px solid #ece1cf;border-radius:14px;background:#fdfaf4;}
+.mc-bind-h{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.mc-bind-h b{font-size:13px;color:#3d3229;}
+.mc-bind-t{font-size:11px;color:#8b7a63;line-height:1.65;margin-bottom:8px;}
+.mc-badge.off{background:#f2eee6;color:#9a8b74;}
