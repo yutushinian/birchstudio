@@ -225,12 +225,12 @@
       box.className = '';
       box.innerHTML =
         '<div class="mc-bind">' +
-        '<div class="mc-bind-h"><b>已绑定账号</b><span class="mc-badge">' + esc(user) + '</span></div>' +
-        '<div class="mc-bind-t">兑换发货通知会同时发送到该账号的「消息中心」，本卡「物流提醒」也一直保留。' +
-        '如需换绑或解绑，直接在下方操作即可。</div>' +
+        '<div class="mc-bind-h"><b>已绑定账号</b><span class="mc-badge">' + esc(user) + '</span>' +
+        '<button class="mc-btn sm danger" style="margin-left:auto;" onclick="MC.unbind()">解绑</button></div>' +
+        '<div class="mc-bind-t">兑换发货通知会同时发送到该账号的「消息中心」，本卡「物流提醒」也一直保留。</div>' +
         '<div class="mc-actions" style="margin-top:8px;">' +
         '<button class="mc-btn" onclick="MC.bindToPhone()">📱 卡号改为该账号手机号</button>' +
-        '<button class="mc-btn danger" onclick="MC.unbind()">解除绑定</button></div>' +
+        '</div>' +
         '</div>';
       return;
     }
@@ -282,7 +282,8 @@
   }
 
   function unbind() {
-    if (!confirm('确定解除绑定吗？解除后发货通知只留在本卡「物流提醒」。')) return;
+    var u = (S.card && S.card.bind_username) || '';
+    if (!confirm('确定解绑账号' + (u ? '「' + u + '」' : '') + '吗？\n\n解绑后兑换发货通知只留在本卡「物流提醒」，会员卡号保持不变。')) return;
     bindCard('', false, null);
   }
 
@@ -782,7 +783,6 @@
       '<div class="mc-detail-grid">' +
       kv('可用积分', pts(d.points) + ' 分') + kv('账户余额', money(d.balance)) +
       kv('开卡时间', when(d.created_at)) + kv('最近更新', when(d.updated_at)) +
-      kv('NFC 短码', d.nfc_code ? d.nfc_code + '（9 位 / 45 bit）' : '未生成') +
       '</div><div class="mc-gap"></div>' +
       '<div class="mc-detail-grid">' +
       '<div><label style="font-size:12px;color:#6b5d4d;">会员卡号（只读）</label><input class="mc-input" value="' + esc(d.card_no) + '" readonly></div>' +
