@@ -201,19 +201,27 @@ textarea.mc-input { min-height: 68px; resize: vertical; }
     align-items: stretch;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    /* 滚动交给整个遮罩层：移动端对 fixed + 嵌套 flex 的内部滚动支持不稳定，
+       改成面板自身 overflow 滚动，兼容性最好 */
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
   }
-  /* 手机端整页滚动：面板本身可滚，头部吸顶，避免嵌套 flex 高度算不出来 */
+  .mc-panel.show { display: block; }
   .mc-sheet {
     max-width: none;
     max-height: none;
     width: 100%;
-    height: 100%;
+    min-height: 100%;
+    height: auto;
+    border: 0;
     border-radius: 0;
+    box-shadow: none;
     display: block;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
+    overflow: visible;
+    animation: none;
   }
   .mc-head {
     position: sticky;
@@ -228,6 +236,23 @@ textarea.mc-input { min-height: 68px; resize: vertical; }
   }
   .mc-cv-no { font-size: 18px; }
 }
+
+/* ===== 站内入口：去掉浏览器给 <a> 的默认蓝色下划线 ===== */
+#mcNavLink,
+#mcNavLink:hover,
+#mcNavLink:visited,
+#mcDrawerLink,
+#mcDrawerLink:hover,
+#mcDrawerLink:visited,
+#mcDrawerLink span,
+#mcDrawerLink small,
+#mcDrawerLink i {
+  text-decoration: none !important;
+}
+#mcDrawerLink { color: inherit; }
+#mcDrawerLink span { color: var(--ink2, #3d3229); }
+#mcDrawerLink small { display: block; color: var(--text-light, #8a7a63); font-size: 11px; letter-spacing: .2px; }
+#mcDrawerLink i { font-size: 20px; line-height: 1; }
 
 /* 物流提醒（前台会员卡首页） */
 .mc-logi{display:flex;gap:10px;align-items:flex-start;padding:10px 2px;border-bottom:1px solid #f0e7d9;}
