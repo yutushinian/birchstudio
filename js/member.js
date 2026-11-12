@@ -717,6 +717,63 @@
     });
   }
 
+  /* ---------------- 本机网页直连：盒子读到卡，已打开的网页直接跳 ---------------- */
+  var liveTimer = 0, liveBusy = false, liveSidCache = '';
+
+  function liveSid() {
+    if (liveSidCache) return liveSidCache;
+    try { liveSidCache = localStorage.getItem('mc_live_sid') || ''; } catch (e) { liveSidCache = ''; }
+    if (!liveSidCache) {
+      liveSidCache = 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      try { localStorage.setItem('mc_live_sid', liveSidCache); } catch (e) {}
+    }
+    return liveSidCache;
+  }
+
+  /* 每 3 秒一次：报活 + 取走盒子推来的卡（服务端取完即清，不会重复触发） */
+  function startLive() {
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
+    function schedule() {
+      if (liveTimer) return;
+      liveTimer = setTimeout(tick, document.hidden ? 8000 : 3000);
+    }
+    function tick() {
+      liveTimer = 0;
+      if (liveBusy) { schedule(); return; }
+      liveBusy = true;
+      fetch(MC_URL + '/rest/v1/rpc/mc_live_tick', {
+        method: 'POST',
+        headers: {
+          'apikey': MC_KEY,
+          'Authorization': 'Bearer ' + MC_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ p_sid: liveSid() }),
+        cache: 'no-store'
+      }).then(function (r) {
+        return r.ok ? r.json() : null;
+      }).then(function (d) {
+        liveBusy = false;
+        if (d && (d.card || d.code)) {
+          try { handleNfc({ card: d.card || '', key: d.k || '', code: d.code || '' }); } catch (e) {}
+        }
+        schedule();
+      }).catch(function () {
+        liveBusy = false;
+        schedule();
+      });
+    }
+    // 切回前台立刻补一拍，免得后台定时器被浏览器节流后要等半分钟
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && !liveBusy) {
+        clearTimeout(liveTimer);
+        liveTimer = 0;
+        tick();
+      }
+    });
+    schedule();
+  }
+
   /* ---------------- 后台：入口与骨架 ---------------- */
   function ensureAdminVisible() {
     var gen = $('genPanel');
@@ -1440,6 +1497,7 @@
     ensureUI();
     mountNav();
     mountAdmin();
+    startLive();
 
     var n = parseNfc();
     if (n) {
