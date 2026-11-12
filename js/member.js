@@ -522,14 +522,36 @@
     try { history.replaceState(null, '', location.pathname); } catch (e) {}
   }
 
+  var nfcSeq = 0, nfcLastCode = '', nfcLastAt = 0;
+
   function handleNfc(n) {
     if (n.code) {
-      openPanel();
-      $('mcBody').innerHTML = '<div class="mc-empty">正在读取会员卡…</div>';
-      rpc('mc_nfc_open', { p_code: n.code }).then(function (d) {
+      var code = String(n.code).trim().toUpperCase();
+      n.code = code;
+      var now = Date.now();
+      // 同一张卡重复上报（盒子多帧 / 页面重复触发）只处理一次，避免弹两次
+      if (code === nfcLastCode && now - nfcLastAt < 3000) return;
+      nfcLastCode = code; nfcLastAt = now;
+
+      var seq = ++nfcSeq, timer = 0;
+      if ($('mcPanel') && $('mcPanel').classList.contains('show')) {
+        $('mcBody').innerHTML = '<div class="mc-empty">正在读取会员卡…</div>';
+      } else {
+        // 请求通常很快，400ms 内成功就不弹「读卡中」，避免多闪一个窗口
+        timer = setTimeout(function () {
+          if (seq !== nfcSeq) return;
+          openPanel();
+          $('mcBody').innerHTML = '<div class="mc-empty">正在读取会员卡…</div>';
+        }, 400);
+      }
+      rpc('mc_nfc_open', { p_code: code }).then(function (d) {
+        if (seq !== nfcSeq) return;
+        clearTimeout(timer);
         n.card = d.card_no;
         resolveNfc(n, d);
       }).catch(function (e) {
+        if (seq !== nfcSeq) return;
+        clearTimeout(timer);
         renderLogin('', 'NFC 码无效或已失效（可能修改过密码），请在后台重新生成 NFC 码', e.message);
       });
       return;
@@ -554,8 +576,7 @@
         if (pwd) { adminOpenCardFromNfc(n.card); return; }
       }
       frontNfc(n, ready);
-    });
-  }
+    });  }
 
   function frontNfc(n, ready) {
     openPanel();
@@ -1237,6 +1258,7 @@
   /* ---------------- NFC 进后台 ---------------- */
   function adminOpenCardFromNfc(cardNo) {
     ensureUI();
+    closePanel();          // 关掉前台「正在读取会员卡」遮罩，避免与后台页面叠两层
     mountAdmin();
     showAdminSection('mcAdminSec');
     // 后台容器可能还没展开，直接渲染到会员卡区
