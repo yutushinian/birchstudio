@@ -29,6 +29,7 @@
   width: 100%;
   max-width: 720px;
   max-height: 90vh;
+  max-height: min(90vh, 90dvh);
   display: flex;
   flex-direction: column;
   background: var(--mc-cream);
@@ -44,6 +45,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: none;
   padding: 16px 20px;
   border-bottom: 1px solid var(--mc-line);
   background: #fff;
@@ -56,7 +58,7 @@
 }
 .mc-x:hover { background: #f3ede2; }
 
-.mc-body { padding: 18px 20px 26px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.mc-body { padding: 18px 20px 26px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1 1 auto; min-height: 0; overscroll-behavior: contain; }
 
 /* 卡面 */
 .mc-card-visual {
@@ -195,7 +197,7 @@ textarea.mc-input { min-height: 68px; resize: vertical; }
 
 @media (max-width: 560px) {
   .mc-panel { padding: 0; }
-  .mc-sheet { max-width: none; max-height: 100vh; height: 100%; border-radius: 0; }
+  .mc-sheet { max-width: none; max-height: 100vh; max-height: 100dvh; height: 100%; border-radius: 0; }
   .mc-body { padding: 16px 14px 30px; }
   .mc-cv-no { font-size: 18px; }
 }
