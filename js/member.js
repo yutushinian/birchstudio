@@ -1386,7 +1386,7 @@
       A.detail = d;
       paintAdminDetail();
       loadAdminTxns(cardNo);
-      toast('已按 NFC 打开会员卡 ' + cardNo, 'ok');
+      toast('已打开会员卡 ' + cardNo, 'ok');
     }).catch(function (e) {
       toast(e.message, 'err');
       frontNfc({ card: cardNo, key: '' });
