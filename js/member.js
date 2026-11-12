@@ -238,13 +238,13 @@
     box.innerHTML =
       '<div class="mc-bind">' +
       '<div class="mc-bind-h"><b>绑定网站账号</b><span class="mc-badge off">未绑定</span></div>' +
-      '<div class="mc-bind-t">绑定后兑换发货会同时通知该账号；不绑定则只记在本卡「物流提醒」。</div>' +
-      '<div class="mc-field"><label>网站账号（用户名或手机号）</label>' +
-      '<input class="mc-input" id="mcBindUser" placeholder="如 zhangsan 或 13800000000" autocomplete="username"></div>' +
+      '<div class="mc-bind-t">只能绑定本站已注册的登录账号；绑定后兑换发货会同时发到该账号的「消息中心」。不绑定则只记在本卡「物流提醒」。</div>' +
+      '<div class="mc-field"><label>网站登录账号</label>' +
+      '<input class="mc-input" id="mcBindUser" placeholder="输入网站用户名，如 zhangsan" autocomplete="username"></div>' +
       '<div class="mc-field"><label style="display:flex;gap:6px;align-items:center;font-size:13px;">' +
       '<input type="checkbox" id="mcBindToPhone"> 同时把会员卡号改为该账号的手机号</label></div>' +
       '<div class="mc-actions"><button class="mc-btn primary" id="mcBindOk" onclick="MC.doBind()">🔗 绑定账号</button></div>' +
-      '<div class="mc-hint" style="margin-top:8px;">改卡号后旧 NFC 标签会失效，需要在后台重新生成 NFC 码。</div>' +
+      '<div class="mc-hint" style="margin-top:8px;">账号须已在网站登录过；改卡号后旧 NFC 标签会失效，需要在后台重新生成 NFC 码。</div>' +
       '</div>';
   }
 
@@ -263,7 +263,9 @@
         }));
       } catch (e) {}
       var changed = r.old_card_no && r.old_card_no !== r.card_no;
-      toast(changed ? '已绑定，卡号改为 ' + r.card_no : (r.bind_username ? '已绑定账号 ' + r.bind_username : '已解除绑定'), 'ok');
+      var msg = changed ? '已绑定，卡号改为 ' + r.card_no
+        : (r.bind_username ? '已绑定账号 ' + r.bind_username + '，发货通知将发送到该账号消息中心' : '已解绑账号');
+      toast(msg, 'ok');
       renderHome();
     }).catch(function (e) {
       if (btn) { btn.disabled = false; btn.textContent = '🔗 绑定账号'; }
@@ -276,7 +278,7 @@
     var user = el ? String(el.value || '').trim() : '';
     var pick = $('mcBindToPhone');
     var toPhone = !!(pick && pick.checked);
-    if (!user) return toast('请填写要绑定的账号', 'err');
+    if (!user) return toast('请填写网站登录账号', 'err');
     if (toPhone && !confirm('确定把会员卡号从 ' + S.card.card_no + ' 改为该账号的手机号吗？\n\n改后旧 NFC 卡需要重新生成。')) return;
     bindCard(user, toPhone, $('mcBindOk'));
   }
