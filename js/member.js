@@ -119,12 +119,37 @@
 
   function openPanel() {
     ensureUI();
+    patchTouchScroll();
     $('mcPanel').classList.add('show');
     document.body.style.overflow = 'hidden';
   }
   function closePanel() {
     if ($('mcPanel')) $('mcPanel').classList.remove('show');
     document.body.style.overflow = '';
+  }
+
+  /* 站点在 document 上注册了 touchmove 拦截：body 锁滚动时只放行白名单容器
+     （.modal-box / .admin-* / .myorders-* 等），会员卡面板不在名单里，
+     手机上就表现为「完全滑不动」。这里在面板内截住冒泡，让浏览器自己滚。 */
+  function allowTouchScroll(el) {
+    if (!el || el.__mcTouch) return;
+    el.__mcTouch = true;
+    el.addEventListener('touchmove', function (e) {
+      var node = e.target;
+      while (node && node !== el) {
+        if (node.classList && (node.classList.contains('mc-sheet') || node.classList.contains('mc-body') ||
+          node.classList.contains('mc-modal-box') || node.classList.contains('mc-tbl-wrap') ||
+          node.classList.contains('mc-panel'))) {
+          e.stopPropagation();
+          return;
+        }
+        node = node.parentNode;
+      }
+    }, { passive: true });
+  }
+  function patchTouchScroll() {
+    allowTouchScroll($('mcPanel'));
+    allowTouchScroll($('mcModal'));
   }
 
   /* ---------------- 前台：登录 ---------------- */
@@ -238,13 +263,14 @@
     box.innerHTML =
       '<div class="mc-bind">' +
       '<div class="mc-bind-h"><b>绑定网站账号</b><span class="mc-badge off">未绑定</span></div>' +
-      '<div class="mc-bind-t">只能绑定本站已注册的登录账号；绑定后兑换发货会同时发到该账号的「消息中心」。不绑定则只记在本卡「物流提醒」。</div>' +
-      '<div class="mc-field"><label>网站登录账号</label>' +
+      '<div class="mc-bind-t">绑定前需要先登录该网站账号。点「登录并绑定」会打开登录框，登录成功后自动回到这里继续绑定。' +
+      '绑定后兑换发货会同时发到该账号的「消息中心」。</div>' +
+      '<div class="mc-field"><label>要绑定的网站账号</label>' +
       '<input class="mc-input" id="mcBindUser" placeholder="输入网站用户名，如 zhangsan" autocomplete="username"></div>' +
       '<div class="mc-field"><label style="display:flex;gap:6px;align-items:center;font-size:13px;">' +
       '<input type="checkbox" id="mcBindToPhone"> 同时把会员卡号改为该账号的手机号</label></div>' +
-      '<div class="mc-actions"><button class="mc-btn primary" id="mcBindOk" onclick="MC.doBind()">🔗 绑定账号</button></div>' +
-      '<div class="mc-hint" style="margin-top:8px;">账号须已在网站登录过；改卡号后旧 NFC 标签会失效，需要在后台重新生成 NFC 码。</div>' +
+      '<div class="mc-actions"><button class="mc-btn primary" id="mcBindOk" onclick="MC.doBind()">登录并绑定</button></div>' +
+      '<div class="mc-hint" style="margin-top:8px;">账号须是本站已注册的登录账号；改卡号后旧 NFC 标签会失效，需要在后台重新生成 NFC 码。</div>' +
       '</div>';
   }
 
@@ -268,9 +294,89 @@
       toast(msg, 'ok');
       renderHome();
     }).catch(function (e) {
-      if (btn) { btn.disabled = false; btn.textContent = '🔗 绑定账号'; }
+      if (btn) { btn.disabled = false; btn.textContent = '登录并绑定'; }
       toast(e.message, 'err');
     });
+  }
+
+  /* ---------------- 绑定前先登录网站账号 ---------------- */
+  var pendingBind = null;   // { user, toPhone }：从会员卡发起的绑定意图
+  var bindPoll = -1;
+
+  /** 读取站内登录态：优先 localStorage，其次全局 userSession（bundle.js 的 let 变量） */
+  function siteUser() {
+    try {
+      var raw = window.localStorage ? window.localStorage.getItem('birch_user') : null;
+      if (raw) {
+        var o = JSON.parse(raw);
+        if (o && o.username) return o;
+      }
+    } catch (e) {}
+    try {
+      if (userSession && userSession.username) return userSession;
+    } catch (e) {}
+    return null;
+  }
+
+  function sameUser(a, b) {
+    return String(a == null ? '' : a).trim().toLowerCase() === String(b == null ? '' : b).trim().toLowerCase();
+  }
+
+  /** 未登录/登录的不是目标账号：收起会员卡，打开站内登录框，登录成功后自动回来继续绑定 */
+  function askSiteLogin(user, toPhone) {
+    pendingBind = { user: user, toPhone: !!toPhone };
+    var opened = false;
+    try {
+      if (typeof window.openLoginModal === 'function') {
+        window.openLoginModal();
+        opened = true;
+        var m = $('loginModal');
+        if (m) m.style.zIndex = '100000';
+        var input = $('loginUser');
+        if (input && !input.value) input.value = user;
+        try { if (typeof window.switchLoginTab === 'function') window.switchLoginTab('login'); } catch (e) {}
+      }
+    } catch (e) { opened = false; }
+    if (!opened) {
+      pendingBind = null;
+      toast('请先在网站登录账号，再回来绑定', 'err');
+      return;
+    }
+    toast('请先登录账号「' + user + '」，登录后会自动继续绑定', 'ok');
+    closePanel();
+    startBindWatch();
+  }
+
+  /** 等登录完成：只有 pendingBind 存在（从会员卡发起）才回来继续绑定 */
+  function startBindWatch() {
+    clearInterval(bindPoll);
+    bindPoll = setInterval(function () {
+      var p = pendingBind;
+      if (!p) { clearInterval(bindPoll); return; }
+      var me = siteUser();
+      if (!me || !me.username) {
+        var m = $('loginModal');
+        // 登录框被关掉且仍未登录：放弃这次绑定
+        if (m && !m.classList.contains('show')) {
+          pendingBind = null;
+          clearInterval(bindPoll);
+        }
+        return;
+      }
+      if (!sameUser(me.username, p.user)) {
+        pendingBind = null;
+        clearInterval(bindPoll);
+        toast('当前登录的是「' + me.username + '」，不是要绑定的「' + p.user + '」', 'err');
+        return;
+      }
+      pendingBind = null;
+      clearInterval(bindPoll);
+      try { if (typeof window.closeLoginModal === 'function') window.closeLoginModal(); } catch (e) {}
+      toast('登录成功，正在绑定…', 'ok');
+      if (!S.card) { renderLogin('', '', ''); return; }
+      renderHome();
+      setTimeout(function () { bindCard(p.user, p.toPhone, $('mcBindOk')); }, 260);
+    }, 400);
   }
 
   function doBind() {
@@ -278,7 +384,17 @@
     var user = el ? String(el.value || '').trim() : '';
     var pick = $('mcBindToPhone');
     var toPhone = !!(pick && pick.checked);
-    if (!user) return toast('请填写网站登录账号', 'err');
+    if (!user) return toast('请填写要绑定的网站账号', 'err');
+    var me = siteUser();
+    if (!me || !me.username) {
+      askSiteLogin(user, toPhone);
+      return;
+    }
+    if (!sameUser(me.username, user)) {
+      toast('请先登录账号「' + user + '」再绑定', 'err');
+      askSiteLogin(user, toPhone);
+      return;
+    }
     if (toPhone && !confirm('确定把会员卡号从 ' + S.card.card_no + ' 改为该账号的手机号吗？\n\n改后旧 NFC 卡需要重新生成。')) return;
     bindCard(user, toPhone, $('mcBindOk'));
   }
