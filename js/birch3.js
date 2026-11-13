@@ -53,28 +53,6 @@
     return u ? u + '/functions/v1/' + name : '';
   }
   function aiEndpoint() { return fnUrl('birch-ai'); }
-
-  /* AI 端点统一解析（与 fixes.js 的 window.__b3AiEndpoint 同规则）：
-     1) 先问 fixes.js 暴露的解析器（它会更正后台配错的地址）；
-     2) 后台配置里必须是绝对地址、且指向 birch-ai / ai-assistant；
-        指向 ai-design 的一律忽略（该函数从未部署，必然 404）；
-     3) 兜底用 bundle 的 SUPABASE_URL 拼绝对地址。 */
-  function resolveAiEndpoint() {
-    try {
-      var shared = get('__b3AiEndpoint');
-      if (typeof shared === 'function') {
-        var u = shared();
-        if (u && /^https?:\/\//i.test(String(u))) return String(u);
-      }
-    } catch (e) {}
-    try {
-      var cfg = get('aiConfig');
-      var cu = cfg && cfg.funcUrl ? String(cfg.funcUrl) : '';
-      if (cu && /^https?:\/\//i.test(cu) && /birch-ai|ai-assistant/i.test(cu) && !/ai-design/i.test(cu)) return cu;
-    } catch (e) {}
-    var fu = aiEndpoint();
-    return /^https?:\/\//i.test(fu) ? fu : '';
-  }
   var CFG_KEY = 'birch_share_discount';
   var LOCAL_KEY = 'birch3_shares_v1';
 
@@ -464,7 +442,7 @@
   }
   async function submitShare(code) {
     var sb = sup();
-    if (!sb) { toast('页面还没准备好，请刷新重试'); return; }
+    if (!sb) { toast('数据库未就绪，请刷新重试'); return; }
     var comment = ($('b3Comment') ? $('b3Comment').value : '').trim();
     var consentEl = $('b3Consent');
     if (consentEl && !consentEl.checked) { toast('请勾选「同意授权」后再提交'); return; }
@@ -533,6 +511,46 @@
     try { window.__b3SyncWheelCta(id); } catch (e) {}
     ctaInjected = true;
   }
+
+  /* ---- 前台普通会员：卡上「官方ID」位置显示会员昵称（金色） ---- */
+  function applyMemberNick() {
+    try {
+      var rp = $('resultPanel'), wrap = $('infoWrap');
+      if (!rp || !wrap) return;
+      var s = get('userSession');
+      if (!s || s.is_admin || s.is_super_admin) return;      /* 仅普通会员 */
+      var nick = String(s.nickname || '').trim();
+      if (!nick) return;
+      var id = String(get('currentVerifyId') || urlCode() || '').trim();
+      if (!id) return;
+      var lines = wrap.querySelectorAll('.info-line'), target = null;
+      for (var i = 0; i < lines.length; i++) {
+        var lab = lines[i].querySelector('.info-label');
+        if (lab && /官方\s*ID/i.test(lab.textContent || '')) { target = lines[i]; break; }
+      }
+      if (!target || target.getAttribute('data-b3-nicked') === '1') return;
+      var paint = function () {
+        var lab2 = target.querySelector('.info-label');
+        var val = target.querySelector('.info-val');
+        if (lab2) lab2.textContent = '会员昵称';
+        if (val) {
+          val.textContent = nick;
+          val.style.color = '#B08D5A';
+          val.style.fontWeight = '700';
+          val.style.letterSpacing = '.04em';
+        }
+        target.setAttribute('data-b3-nicked', '1');
+      };
+      var sb = sup();
+      if (sb && typeof sb.rpc === 'function') {
+        /* 只在该码确实属于当前会员时替换；查询失败则保留官方ID */
+        sb.rpc('get_record_bind_account', { p_record_id: id }).then(function (r) {
+          var u = r && r.data;
+          if (!u || String(u) === String(s.username || '')) paint();
+        }, function () {});
+      }
+    } catch (e) {}
+  }
   function urlCode() {
     try {
       var raw = (location.search || '') + (location.hash || '');
@@ -557,9 +575,10 @@
   function watchVerifyResult() {
     var rp = $('resultPanel');
     if (!rp) return;
-    var obs = new MutationObserver(function () { injectShareCta(); });
+    var obs = new MutationObserver(function () { injectShareCta(); applyMemberNick(); });
     obs.observe(rp, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     injectShareCta();
+    applyMemberNick();
   }
 
   /* ============================================================
@@ -717,7 +736,7 @@
     if (txt.length < 1 || txt.length > 120) { toast('弹幕内容需 1~120 字'); return; }
     var nm = ($('b3ManualName') ? $('b3ManualName').value : '').trim() || '白桦精选';
     var sb = sup();
-    if (!sb) { toast('页面还没准备好，请刷新重试'); return; }
+    if (!sb) { toast('数据库未就绪'); return; }
     try {
       var r = await sb.from('shares').insert([{
         code: '', name: nm, batch: '', idea: '', img: '', comment: txt,
@@ -1052,16 +1071,19 @@
     }
     /* 端点解析：优先用后台配置里指向 birch-ai / ai-assistant 的绝对地址；
        否则回落到由 bundle 全局 SUPABASE_URL 拼出的绝对地址。
-       注意：
-        · 两个来源都只在「此刻」求值 —— 绝不允许出现相对路径，
-          否则请求会打到静态站自己身上，得到 404 的 HTML 而不是 JSON；
-        · 必须排除 ai-design —— 那是历史遗留的、并未部署的函数名，
-          后台配置里若还存着它，会稳定 404（这是「AI 出图/智能搭配」失效的主因）。 */
-    var fu = resolveAiEndpoint();
-    if (!fu) {
+       注意：两个来源都只在「此刻」求值 —— 绝不允许出现相对路径，
+       否则请求会打到静态站自己身上，得到 404 的 HTML 而不是 JSON。 */
+    var fu = '';
+    try {
+      var cfg = get('aiConfig');
+      var cu = cfg && cfg.funcUrl ? String(cfg.funcUrl) : '';
+      if (cu && /^https?:\/\//i.test(cu) && /birch-ai|ai-assistant/i.test(cu)) fu = cu;
+    } catch (e) {}
+    if (!fu) fu = aiEndpoint();
+    if (!/^https?:\/\//i.test(fu)) {
       var tipNo = $('b3AiQuickTip');
-      if (tipNo) tipNo.textContent = '⚠️ AI 暂时不可用，请刷新重试';
-      toast('AI 暂时不可用，请刷新页面重试；若仍不行请联系店主');
+      if (tipNo) tipNo.textContent = '⚠️ AI 服务地址未就绪，请刷新页面后重试';
+      toast('AI 服务地址未就绪：请刷新页面后重试；若仍不行请到后台「AI 智能设计」检查函数地址');
       return;
     }
     var anonK = SB_ANON();
@@ -1069,20 +1091,8 @@
     var info = {};
     if (mode === 'bazi') {
       var y = grabInput('baziYear'), mo = grabInput('baziMonth'), d = grabInput('baziDay'), h = grabInput('baziHour');
-      /* ★ 修复：以前即使三格生辰没填，也照样把「?年?月?日」发给 AI，
-         出来的方案与本人无关（用户反馈的「生辰测石有问题」）。
-         这里先校验：排盘结果或手填的三格，至少要有一套完整信息。 */
-      var lb0 = get('lastBaziInfo');
-      var hasManual = !!(y && mo && d);
-      var hasChart = !!(lb0 && lb0.ganzhi);
-      if (!hasManual && !hasChart) {
-        var tipB = $('b3AiQuickTip');
-        if (tipB) tipB.textContent = '⚠️ 请先填写出生年月日，或点击「测算喜用」';
-        toast('请先填写完整的出生年月日（或点「测算喜用」出排盘），AI 才能按本命设计');
-        return;
-      }
       info = { year: y, month: mo, day: d, hour: h, zod: zodiacOf(y) };
-      var lb = lb0;
+      var lb = get('lastBaziInfo');
       if (lb && lb.ganzhi) info.ganzhi = lb.ganzhi;
       if (lb && lb.dayMaster) info.dayMaster = lb.dayMaster;
       if (lb && lb.wuxing) info.wuxing = lb.wuxing;
@@ -1092,31 +1102,7 @@
       if (lb && lb.hourLabel) info.hourLabel = lb.hourLabel;
     } else if (mode === 'hex') {
       var lh = get('lastHex') || {};
-      /* ★ 修复：bundle 的 lastHex 只有 {lines, low, high, name, yang, yin, relation, lowEl, highEl}，
-         并没有 sym / idea / wu —— 历史上这里只读这三项，等于什么都没传给 AI，
-         所以「摇卦定制」出来的方案与卦象无关（即用户反馈的「摇卦定制有问题」）。
-         现在把上下卦、五行、生克关系、六爻全部带上。 */
-      var linesArr = lh.lines || [];
-      info = {
-        name: lh.name || '',
-        sym: lh.sym || '',
-        idea: lh.idea || '',
-        wu: lh.wu || lh.lowEl || lh.highEl || ''
-      };
-      if (lh.low) info.low = lh.low;
-      if (lh.high) info.high = lh.high;
-      if (lh.lowEl) info.lowEl = lh.lowEl;
-      if (lh.highEl) info.highEl = lh.highEl;
-      if (lh.relation) info.relation = lh.relation;
-      if (lh.yang !== undefined) info.yang = lh.yang;
-      if (lh.yin !== undefined) info.yin = lh.yin;
-      if (linesArr.length) {
-        info.lines = linesArr.join('');   /* 六爻：初爻→上爻，1=阳 0=阴 */
-        info.lineDesc = linesArr.map(function (v, i) {
-          return ['初', '二', '三', '四', '五', '上'][i] + '爻' + (v ? '阳' : '阴');
-        }).join('、');
-      }
-      if (!info.idea && info.high && info.low) info.idea = info.high + '上' + info.low + '下';
+      info = { name: lh.name || '', sym: lh.sym || '', idea: lh.idea || '', wu: lh.wu || '' };
     } else {
       info = { note: '自由发挥：请给出一串 3-5 种晶石的整套搭配设计、配色与意象（无生辰信息）' };
     }
@@ -1127,27 +1113,16 @@
     var tip0 = $('b3AiQuickTip');
     if (tip0) tip0.textContent = '⏳ AI 生成中…（约 1 分钟，请勿关闭页面）';
     try {
-      /* 统一走 __b3AiPost（fixes.js）：text/plain 简单请求不发预检，
-         失败时自动换带回退方式重试，并给出可定位的原因。 */
-      var post = get('__b3AiPost');
-      var out = (typeof post === 'function')
-        ? await post({ mode: 'design', kind: kind, info: info, mm: mm })
-        : null;
-      var res, text, r;
-      if (!out) {
-        res = await fetch(fu, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', apikey: anonK, Authorization: 'Bearer ' + anonK },
-          body: JSON.stringify({ mode: 'design', kind: kind, info: info, mm: mm })
-        });
-        text = await res.text();
-        r = null;
-        try { r = JSON.parse(text); } catch (e) { r = { raw: text.slice(0, 300) }; }
-        out = { ok: !!(res.ok && r && r.ok), data: r, error: (r && (r.error || r.raw)) || ('HTTP ' + res.status) };
-      }
-      r = out.data || null;
-      if (!out.ok || !r || !r.ok) {
-        var err = out.error || '未知错误';
+      var res = await fetch(fu, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: anonK, Authorization: 'Bearer ' + anonK },
+        body: JSON.stringify({ mode: 'design', kind: kind, info: info, mm: mm })
+      });
+      var text = await res.text();
+      var r = null;
+      try { r = JSON.parse(text); } catch (e) { r = { raw: text.slice(0, 300) }; }
+      if (!res.ok || !r || !r.ok) {
+        var err = (r && (r.error || r.raw)) || ('HTTP ' + res.status);
         var tipErr = $('b3AiQuickTip');
         if (tipErr) tipErr.textContent = '⚠️ 生成失败：' + String(err).slice(0, 40);
         toast('AI 服务错误：' + err);
@@ -1246,24 +1221,11 @@
       toast('✅ 设计已生成（含效果图）');
       var qc = call('consumeAiQuota', []);
     } catch (e) {
-      /* 注意：走到这里说明是**前端侧**异常（fetch 被拒、超时、或渲染出错），
-         而不是服务端返回的错误。以前这里只报「网络不通」，无法定位；
-         现在把真实原因、请求地址与探针结果一起带出来。 */
       var em = String((e && e.message) || e || '');
-      var isNet = /Failed to fetch|NetworkError|Load failed|network|timed? ?out|abort/i.test(em);
-      var diag = get('__b3AiDiag') || null;
-      var detail = '';
-      if (isNet) {
-        var u = get('__b3AiEndpoint');
-        var eu = (typeof u === 'function') ? u() : '';
-        detail = '请求未成功（' + (diag && diag.http ? '探针 HTTP ' + diag.http + '，CORS 头：' + diag.cors : '探针亦失败') + '）';
-        try { console.warn('[birch] AI 调用失败（前端侧）', { endpoint: eu, error: em, diag: diag }); } catch (e3) {}
-      } else {
-        detail = em.slice(0, 60) || '未知异常';
-      }
+      var isNet = /Failed to fetch|NetworkError|Load failed|network|timed? ?out/i.test(em);
       var tipE = $('b3AiQuickTip');
-      if (tipE) tipE.textContent = '⚠️ AI 调用失败：' + detail.slice(0, 60);
-      toast('AI 调用失败：' + detail);
+      if (tipE) tipE.textContent = '⚠️ AI 调用失败：' + (isNet ? '网络不通' : em.slice(0, 30));
+      toast('AI 调用失败：' + (isNet ? '网络请求没有到达服务端，请检查网络后重试' : em));
       if (mode === 'random') { try { call('randomBracelet', []); toast('已用本地随缘搭配代替 ✨'); } catch (e2) {} }
     } finally {
       call('hideLoading', []);
@@ -1271,10 +1233,6 @@
   }
   function mmTotal(mm) { return mm >= 10 ? 18 : 22; }
   function hookAi() {
-    /* 无论是否已经有人接管入口，都要把「真正的实现」挂出去：
-       fixes.js / 内联 shim 会抢先把 __b3AiHookV2 置 1（它们只管入口转发），
-       若在下面才导出，就会因为提前 return 而永远不导出。 */
-    window.__b3AiNew = aiDesignNew;
     if (window.__b3AiHookV2) return true;
     /* bundle.js 是 defer 脚本，本文件却常常先执行完（features.js 动态注入=async）。
        因此这里不能再假设 window.aiDesign 已经存在：必须轮询等到 bundle 把它挂上
@@ -1346,7 +1304,7 @@
     if (!k) return;                        /* 留空＝沿用，绝不把已存的 Key 抹掉 */
     var sb = sup();
     var pwd = adminPwdNow();
-    if (!sb) { toast('出图 Key 保存失败：页面还没准备好，请刷新重试'); return; }
+    if (!sb) { toast('出图 Key 保存失败：数据库未就绪'); return; }
     if (!pwd) { toast('出图 Key 保存失败：管理员密码已过期，请重新登录后台'); return; }
     var payload = JSON.stringify({
       key: k,
@@ -1484,22 +1442,75 @@
     if (!__b3CopyNfcDone) {
       __b3CopyNfcDone = true;
       var SITE = get('SITE_URL') || (location.origin || 'https://birchstudio.cn');
+      /* 手机端剪贴板：clipboard 可能被权限/非安全上下文拒绝，必须有 execCommand 兜底 */
+      function b3CopyText(text, okMsg, failMsg) {
+        function finish(ok) {
+          if (ok) { toast(okMsg); return; }
+          try { window.prompt('复制受限，请长按或手动复制下面的链接：', text); } catch (e) {}
+          toast(failMsg);
+        }
+        function legacy() {
+          var ok = false;
+          try {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0;';
+            document.body.appendChild(ta);
+            ta.focus(); ta.select();
+            try { ta.setSelectionRange(0, text.length); } catch (e) {}
+            try { ok = document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+          } catch (e) { ok = false; }
+          finish(ok);
+        }
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () { finish(true); }, legacy);
+          } else { legacy(); }
+        } catch (e) { legacy(); }
+      }
+      /* 记录最近一次真实点按的元素/记录行：移动端 activeElement 不可靠 */
+      try {
+        ['pointerdown', 'touchstart', 'mousedown'].forEach(function (ev) {
+          document.addEventListener(ev, function (e) {
+            window.__b3LastClickEl = e.target;
+            var row = e.target && e.target.closest ? e.target.closest('.db-record') : null;
+            if (row && row.getAttribute('data-id')) window.__b3LastRecId = row.getAttribute('data-id');
+          }, true);
+        });
+      } catch (e) {}
       window.copyNfcCode = function () {
         var code = '';
         try {
-          var el = document.activeElement;
-          var row = el && el.closest ? el.closest('.db-record') : null;
-          if (row && row.getAttribute('data-id')) code = row.getAttribute('data-id');
+          var el = window.__b3LastClickEl;
+          var inExport = !!(el && el.closest && el.closest('#secSingle, .export-card, #qrShow'));
+          if (inExport) {
+            var ex = document.getElementById('expCode');
+            var v = ex ? String(ex.textContent || '').trim() : '';
+            if (v && v !== '-' && v !== '—') code = v;
+          }
+          if (!code && el && el.closest) {
+            var row = el.closest('.db-record');
+            if (row && row.getAttribute('data-id')) code = String(row.getAttribute('data-id'));
+          }
+          if (!code && window.__b3LastRecId) code = String(window.__b3LastRecId);
+          if (!code) {
+            var chk = document.querySelector('.rec-chk:checked, .uo-chk:checked, .merge-chk:checked');
+            if (chk) code = String(chk.value || chk.getAttribute('value') || '');
+          }
+          if (!code) {
+            var ex2 = document.getElementById('expCode');
+            var v2 = ex2 ? String(ex2.textContent || '').trim() : '';
+            if (v2 && v2 !== '-' && v2 !== '—') code = v2;
+          }
+          if (!code) code = String(get('currentVerifyId') || urlCode() || '');
         } catch (e) {}
-        if (!code) {
-          var ex = document.getElementById('expCode');
-          if (ex && ex.textContent && String(ex.textContent).trim() !== '-' && String(ex.textContent).trim()) code = String(ex.textContent).trim();
-        }
-        var url = code ? (SITE.replace(/\/$/, '') + '/?nfc=1&c=' + encodeURIComponent(code)) : (SITE.replace(/\/$/, '') + '?nfc=1');
-        var ct = get('copyText');
-        if (typeof ct === 'function') { try { ct(url); } catch (e) { try { navigator.clipboard.writeText(url); } catch (e2) {} } }
-        else { try { navigator.clipboard.writeText(url); } catch (e) {} }
-        toast(code ? '✅ 已复制该客户唯一 NFC 链接（?nfc=1&c=' + code + '）' : '已复制 NFC 互动链接');
+        var base = String(SITE || location.origin || 'https://birchstudio.cn').replace(/\/$/, '');
+        var url = code ? (base + '/?nfc=1&c=' + encodeURIComponent(code)) : (base + '?nfc=1');
+        b3CopyText(url,
+          code ? '✅ 已复制该客户唯一 NFC 链接（?nfc=1&c=' + code + '）' : '已复制 NFC 互动链接',
+          '自动复制失败，已弹出链接，请手动复制');
       };
     }
     /* 打开 ?c=CODE 时自动验证（识别对应客户订单） */
