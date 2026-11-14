@@ -2795,6 +2795,10 @@ else{setTimeout(b3Boot,900);}
 (function () {
   'use strict';
   function el(id) { return document.getElementById(id); }
+  /* 读卡态守护：member.js 的「正在读取会员卡…」是 fixed 全屏遮罩，在主界面上
+     弹出时既盖住页面又没有可见的返回入口；supabase 请求挂起时还会永远停留。
+     这里在识别到读卡时切到会员卡版块，并给挂起状态加超时兜底。 */
+  var readStart = 0, readTimer = 0, cooldownUntil = 0;
   /* 与 member.js 的 parseNfc 保持一致的识别规则：mc / k / c（hash 或 query） */
   function pick(raw, k) {
     var m = new RegExp('[?&#]' + k + '=([^&]*)').exec(raw);
@@ -2833,7 +2837,62 @@ else{setTimeout(b3Boot,900);}
     if (v) v.setAttribute('aria-hidden', member ? 'false' : 'true');
     syncHost();
   }
+  function readingText() {
+    var b = el('mcBody');
+    return !!(b && b.innerHTML && b.innerHTML.indexOf('正在读取会员卡') >= 0);
+  }
+  function stopReading(msg) {
+    var b = el('mcBody');
+    if (!b) return;
+    b.innerHTML = '<div class="mc-empty" style="line-height:2;text-align:center;padding:26px 12px;">' +
+      '<div style="font-size:15px;color:#3d3229;margin-bottom:12px;">' + msg + '</div>' +
+      '<button type="button" id="blReadBack" class="bl-mv-back" style="margin-top:4px;">← 返回主界面</button>' +
+      '</div>';
+    var btn = el('blReadBack');
+    if (btn && !btn.__blBound) { btn.__blBound = true; btn.addEventListener('click', backToMain); }
+  }
+  function startReadTimer() {
+    if (readStart) return;
+    readStart = Date.now();
+    readTimer = setTimeout(function () {
+      readTimer = 0; readStart = 0;
+      if (readingText()) {
+        cooldownUntil = Date.now() + 15000;
+        if (!document.body.classList.contains('bl-mode-member')) {
+          /* 主界面/管理员：遮罩不该留在这里，先关掉 */
+          try { if (window.MC && typeof window.MC.closePanel === 'function') window.MC.closePanel(); } catch (e) {}
+        }
+        stopReading('读取会员卡超时，请检查网络后重新刷卡');
+      }
+    }, 12000);
+  }
+  function guardReading() {
+    var reading = readingText();
+    var member = document.body.classList.contains('bl-mode-member');
+    if (reading) {
+      if (member) {
+        /* 会员卡版块内：正常等待读卡结果，12s 后仍挂起则兜底退出 */
+        startReadTimer();
+      } else if (!isAdminRoute() && Date.now() >= cooldownUntil) {
+        /* 识别到会员卡 → 直接进会员卡版块，让「返回主界面」入口可见 */
+        setMode(true);
+        startReadTimer();
+      } else if (isAdminRoute()) {
+        /* 管理员另算：留在主界面走原后台逻辑，仅挂超时兜底防挂起 */
+        startReadTimer();
+      } else {
+        /* 冷却期内：轮询带来的重复读卡直接关掉，不打扰主界面 */
+        try { if (window.MC && typeof window.MC.closePanel === 'function') window.MC.closePanel(); } catch (e) {}
+        if (readingText()) stopReading('读取会员卡超时，请稍后重新刷卡');
+      }
+    } else if (readStart) {
+      readStart = 0;
+      if (readTimer) { clearTimeout(readTimer); readTimer = 0; }
+    }
+  }
   function backToMain() {
+    /* 用户主动返回后短暂冷却，避免每 3 秒的 live 轮询立刻又把会员卡版块弹回来 */
+    cooldownUntil = Math.max(cooldownUntil, Date.now() + 6000);
     setMode(false);
     try { history.replaceState(null, '', location.pathname); } catch (e) {}
     try { document.body.style.overflow = ''; } catch (e) {}
@@ -2841,10 +2900,11 @@ else{setTimeout(b3Boot,900);}
   }
   setMode(detectMember() && !isAdminRoute());
   try {
-    new MutationObserver(function () { syncHost(); }).observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(function () { syncHost(); guardReading(); }).observe(document.body, { childList: true, subtree: true });
   } catch (e) {}
-  document.addEventListener('DOMContentLoaded', function () { setTimeout(syncHost, 0); });
-  window.addEventListener('load', function () { setTimeout(syncHost, 0); });
+  function refresh() { syncHost(); guardReading(); }
+  document.addEventListener('DOMContentLoaded', function () { setTimeout(refresh, 0); });
+  window.addEventListener('load', function () { setTimeout(refresh, 0); });
   function bindBack() {
     var b = el('blMvBack');
     if (b && !b.__blBound) { b.__blBound = true; b.addEventListener('click', backToMain); }
@@ -2852,12 +2912,13 @@ else{setTimeout(b3Boot,900);}
   bindBack();
   window.addEventListener('hashchange', function () {
     if (detectMember() && !isAdminRoute()) setMode(true);
-    syncHost();
+    refresh();
   });
   window.BL_VIEW = {
     toMember: function () { setMode(true); },
     toMain: backToMain,
-    isMember: function () { return document.body.classList.contains('bl-mode-member'); }
+    isMember: function () { return document.body.classList.contains('bl-mode-member'); },
+    guard: guardReading
   };
 })();
 </script>
