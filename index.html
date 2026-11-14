@@ -41,6 +41,49 @@
   <link rel="stylesheet" href="js/motion.css?v=20260916b">
   <!-- 光影层：界面背景（桦皮纸纹 + 暖光斑）/ 首屏环境动效 / 入场编排 / 五色令牌 -->
   <link rel="stylesheet" href="js/theme.css?v=20260918a">
+<link rel="stylesheet" href="js/member.css?v=20261112m">
+<link rel="stylesheet" href="js/orders-ui.css?v=20261111c">
+
+<style id="blViewStyle">
+/* ===== 主界面 / 会员卡界面：两个平行版块 ===== */
+#blMainView { display: block; }
+body.bl-mode-member #blMainView { display: none !important; }
+#blMemberView {
+  display: none; position: fixed; inset: 0; z-index: 99990;
+  flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: radial-gradient(120% 90% at 50% 0%, #FFFDF8 0%, #F7F1E6 48%, #EEE6D6 100%);
+}
+body.bl-mode-member #blMemberView { display: flex; }
+.bl-mv-bar {
+  position: sticky; top: 0; z-index: 3; flex: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 18px; background: rgba(255,253,248,.94);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  border-bottom: 1px solid #e4dccd;
+}
+.bl-mv-brand { font-size: 16px; font-weight: 700; color: #2f4a38; letter-spacing: .5px; }
+.bl-mv-brand em { font-style: normal; color: #c9a96e; font-size: 11px; margin-left: 6px; letter-spacing: 1px; }
+.bl-mv-back {
+  border: 1px solid #c8d9c8; background: #fff; color: #3d3229;
+  border-radius: 999px; padding: 9px 16px; font-size: 14px; cursor: pointer; white-space: nowrap;
+}
+.bl-mv-back:hover { background: #f3ede2; }
+#mcStage { flex: 1 1 auto; display: flex; align-items: flex-start; justify-content: center; padding: 22px 16px 44px; }
+#mcStage #mcHost { width: 100%; max-width: 760px; }
+/* 版块内：把原来的 fixed 遮罩面板改成普通页面内容 */
+#mcStage .mc-panel {
+  position: static !important; inset: auto !important; z-index: auto !important;
+  display: flex !important; align-items: flex-start !important; justify-content: center !important;
+  padding: 0 !important; background: none !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+#mcStage .mc-sheet {
+  max-width: 760px !important; max-height: none !important;
+  min-height: calc(100vh - 140px); box-shadow: 0 14px 40px rgba(40,32,22,.14);
+}
+#mcStage .mc-body { overflow: visible !important; }
+</style>
 </head>
 
 <body>
@@ -454,6 +497,10 @@
   }
 
   function brandVisible() {
+    /* 会员卡版块：主界面被隐藏，#brand 不可见；改为预加载稳定停留约 10s（20s 由 hardMax 兜底） */
+    if (document.body && document.body.classList && document.body.classList.contains('bl-mode-member')) {
+      return (now() - t0) >= 10000;
+    }
     var b = document.getElementById('brand');
     if (!b) return false;
     try {
@@ -603,6 +650,8 @@
 })();
 </script>
 <!-- ===== 首屏加载屏结束 ===== -->
+<!-- ===== 版块 A：正常主界面 ===== -->
+<div id="blMainView">
 
   <!-- 光影层背景（三层景深：桦皮纸纹 + 暖光斑 ×3）。装饰层，不接收指针事件 -->
   <div class="b-atmos" aria-hidden="true"><i class="b-a1"></i><i class="b-a2"></i><i class="b-a3"></i></div>
@@ -2728,6 +2777,90 @@ function b3Boot(){
 if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",function(){setTimeout(b3Boot,900);});}
 else{setTimeout(b3Boot,900);}
 })();
-</script><script src="js/motion.js?v=20260916b"></script><script src="js/theme.js?v=20260918a" defer></script></body>
+</script><script src="js/motion.js?v=20260916b"></script><script src="js/member.js?v=20261112o" defer></script>
+<script src="js/orders-ui.js?v=20261111c" defer></script>
+<script src="js/site-fix.js?v=20261112b" defer></script>
+<script src="js/theme.js?v=20260918a" defer></script></div><!-- /#blMainView -->
+
+<!-- ===== 版块 B：会员卡界面（与主界面平级；识别到会员卡时直接进入） ===== -->
+<div id="blMemberView" aria-hidden="true">
+  <header class="bl-mv-bar">
+    <div class="bl-mv-brand">白桦 · 会员卡<em>BIRCH CARD</em></div>
+    <button class="bl-mv-back" id="blMvBack" type="button">← 返回主界面</button>
+  </header>
+  <div id="mcStage"></div>
+</div>
+
+<script id="blViewRouter">
+(function () {
+  'use strict';
+  function el(id) { return document.getElementById(id); }
+  /* 与 member.js 的 parseNfc 保持一致的识别规则：mc / k / c（hash 或 query） */
+  function pick(raw, k) {
+    var m = new RegExp('[?&#]' + k + '=([^&]*)').exec(raw);
+    return m ? decodeURIComponent(m[1].replace(/\+/g, '%20')) : '';
+  }
+  function detectMember() {
+    var raw = (location.hash || '') + '&' + (location.search || '');
+    if (pick(raw, 'c')) return true;
+    if (pick(raw, 'mc')) return true;
+    return false;
+  }
+  /* 管理员另算：带 admin 参数或已有管理员会话时，一律留在主界面走后台逻辑 */
+  function isAdminRoute() {
+    try { if (/(?:^|[?&#])admin(?:=|[&#]|$)/i.test((location.hash || '') + (location.search || ''))) return true; } catch (e) {}
+    try { if (sessionStorage.getItem('birch_admin_pwd')) return true; } catch (e) {}
+    return false;
+  }
+  var origClose = null;
+  function syncHost() {
+    var host = el('mcHost');
+    if (!host) return;
+    var member = document.body.classList.contains('bl-mode-member');
+    var target = member ? el('mcStage') : document.body;
+    if (target && host.parentNode !== target) target.appendChild(host);
+    var close = el('mcClose');
+    if (close) {
+      if (!origClose) origClose = close.onclick;
+      close.onclick = member ? function (e) { if (e) e.preventDefault(); backToMain(); }
+                             : (origClose || function () {});
+    }
+  }
+  function setMode(member) {
+    if (member) document.body.classList.add('bl-mode-member');
+    else document.body.classList.remove('bl-mode-member');
+    var v = el('blMemberView');
+    if (v) v.setAttribute('aria-hidden', member ? 'false' : 'true');
+    syncHost();
+  }
+  function backToMain() {
+    setMode(false);
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    try { document.body.style.overflow = ''; } catch (e) {}
+    try { if (window.MC && typeof window.MC.closePanel === 'function') window.MC.closePanel(); } catch (e) {}
+  }
+  setMode(detectMember() && !isAdminRoute());
+  try {
+    new MutationObserver(function () { syncHost(); }).observe(document.body, { childList: true, subtree: true });
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () { setTimeout(syncHost, 0); });
+  window.addEventListener('load', function () { setTimeout(syncHost, 0); });
+  function bindBack() {
+    var b = el('blMvBack');
+    if (b && !b.__blBound) { b.__blBound = true; b.addEventListener('click', backToMain); }
+  }
+  bindBack();
+  window.addEventListener('hashchange', function () {
+    if (detectMember() && !isAdminRoute()) setMode(true);
+    syncHost();
+  });
+  window.BL_VIEW = {
+    toMember: function () { setMode(true); },
+    toMain: backToMain,
+    isMember: function () { return document.body.classList.contains('bl-mode-member'); }
+  };
+})();
+</script>
+</body>
 
 </html>
