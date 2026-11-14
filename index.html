@@ -94,7 +94,7 @@ body.bl-mode-member #blMemberView { display: flex; }
   cursor:none;-webkit-user-select:none;user-select:none;touch-action:none;overscroll-behavior:contain;
   opacity:1;filter:blur(0);transform:scale(1);
   transition:opacity .68s cubic-bezier(.4,0,.2,1),filter .68s ease,transform .68s cubic-bezier(.4,0,.2,1);
-  animation:blFlFailSafe .01s linear 24s forwards}
+  animation:blFlFailSafe .01s linear 10s forwards}
 @keyframes blFlFailSafe{to{opacity:0;visibility:hidden;pointer-events:none}}
 #blFirstLoad.bl-fl-out{opacity:0;filter:blur(10px);transform:scale(1.035);pointer-events:none}
 #blFirstLoad *{box-sizing:border-box}
@@ -189,7 +189,7 @@ body.bl-mode-member #blMemberView { display: flex; }
   var t0 = now();
   var state = 'loading';           // loading | finishing | gone
   var p = 0, target = 0, shown = -1;
-  var minShow = 1500, hardMax = 20000;
+  var minShow = 900, hardMax = 8000;
   var finishAt = 0, nextCheck = 0;
   var raf = 0, running = true, last = now();
 
@@ -497,9 +497,17 @@ body.bl-mode-member #blMemberView { display: flex; }
   }
 
   function brandVisible() {
-    /* 会员卡版块：主界面被隐藏，#brand 不可见；改为预加载稳定停留约 10s（20s 由 hardMax 兜底） */
+    /* 会员卡版块：主界面被隐藏，#brand 不可见。不再固定停留 10 秒 ——
+       会员卡内容一渲染出来就淡出；读卡慢时最多等 6 秒，其余交给 hardMax 兜底。 */
     if (document.body && document.body.classList && document.body.classList.contains('bl-mode-member')) {
-      return (now() - t0) >= 10000;
+      var mb = document.getElementById('mcBody');
+      if (mb && mb.innerHTML) {
+        var mh = mb.innerHTML;
+        if (mh.length > 40 &&
+            mh.indexOf('正在读取会员卡') < 0 &&
+            mh.indexOf('正在恢复登录') < 0) return true;
+      }
+      return (now() - t0) >= 6000;
     }
     var b = document.getElementById('brand');
     if (!b) return false;
@@ -534,8 +542,8 @@ body.bl-mode-member #blMemberView { display: flex; }
   function updateProgress(t) {
     var e2 = t - t0;
     var base;
-    if (e2 < 1100) base = 0.03 + (e2 / 1100) * 0.30;
-    else base = 0.33 + Math.min(0.59, ((e2 - 1100) / 15000) * 0.59);
+    if (e2 < 700) base = 0.03 + (e2 / 700) * 0.34;
+    else base = 0.37 + Math.min(0.55, ((e2 - 700) / 4200) * 0.55);
     var want = Math.max(base, target);
     if (state === 'finishing') want = 1;
     p += (want - p) * (state === 'finishing' ? 0.16 : 0.06);
@@ -2931,6 +2939,79 @@ else{setTimeout(b3Boot,900);}
     isMember: function () { return document.body.classList.contains('bl-mode-member'); },
     guard: guardReading
   };
+})();
+</script>
+<script id="blLoginGuard">
+(function () {
+  'use strict';
+  var installed = false, origToast = null, lastSuccessAt = 0;
+
+  /* 判断「页面当前认为已经登录」：内存会话 / localStorage / 导航栏已显示用户名 */
+  function alreadyLoggedIn() {
+    try { if (window.userSession && window.userSession.username) return String(window.userSession.username); } catch (e) {}
+    try {
+      var o = JSON.parse(localStorage.getItem('birch_user') || 'null');
+      if (o && o.username) return String(o.username);
+    } catch (e) {}
+    try {
+      var b = document.getElementById('loginBtn');
+      if (b && b.innerText && b.innerText.indexOf('登录') < 0 && b.innerText.trim()) return '当前账号';
+      var n = document.querySelector('#bNav .b-login');
+      if (n && n.title && n.title.indexOf('已登录') >= 0) return '当前账号';
+    } catch (e) {}
+    return '';
+  }
+  function unlockLoading() {
+    try { if (typeof window.hideLoading === 'function') window.hideLoading(); } catch (e) {}
+    try {
+      var m = document.getElementById('loadingMask');
+      if (m) { m.classList.remove('show'); m.classList.remove('enter-mode'); m.classList.remove('ai-mode'); }
+    } catch (e) {}
+    try { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; } catch (e) {}
+  }
+  function noise(s) { return /^(登录失败|登录异常|暂时连不上)/.test(s); }
+  function success(s) { return /登录成功|已登录|正在绑定/.test(s); }
+
+  /* 包装全局 toast：账号其实已登录（或刚提示过登录成功）时，抑制
+     「登录失败 / 登录异常 / 暂时连不上」这类网络抖动或重复触发的误报。 */
+  function install() {
+    if (installed) return true;
+    if (typeof window.toast !== 'function') return false;
+    installed = true;
+    origToast = window.toast;
+    window.toast = function (msg) {
+      var s = String(msg == null ? '' : msg);
+      if (success(s)) lastSuccessAt = Date.now();
+      if (noise(s)) {
+        var u = alreadyLoggedIn();
+        if (u || (lastSuccessAt && Date.now() - lastSuccessAt < 4000)) {
+          unlockLoading();
+          return origToast('✅ 已登录' + (u ? '：' + u : '') + '，请继续操作');
+        }
+      }
+      return origToast(msg);
+    };
+    return true;
+  }
+  /* bundle.js 是 defer，内联脚本解析时 window.toast 还没就绪 */
+  install();
+  document.addEventListener('DOMContentLoaded', install);
+  window.addEventListener('load', install);
+
+  /* 登录/注册遮罩（enter-mode）最长停留 10 秒：touch_login / get_user_auth
+     挂起时 finally{hideLoading()} 到不了，这里兜底关掉并恢复滚动。
+     只对 enter-mode 生效，不影响 AI 生成等长任务。 */
+  var shownAt = 0;
+  setInterval(function () {
+    var m = document.getElementById('loadingMask');
+    var on = !!(m && m.classList.contains('enter-mode'));
+    if (on) {
+      if (!shownAt) shownAt = Date.now();
+      else if (Date.now() - shownAt > 10000) { unlockLoading(); shownAt = 0; }
+    } else {
+      shownAt = 0;
+    }
+  }, 500);
 })();
 </script>
 </body>
