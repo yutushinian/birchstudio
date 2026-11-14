@@ -2837,41 +2837,53 @@ else{setTimeout(b3Boot,900);}
     if (v) v.setAttribute('aria-hidden', member ? 'false' : 'true');
     syncHost();
   }
-  function readingText() {
+  function readingPlaceholder() {
+    /* 只认「#mcBody 整段就是读卡占位」这一种形态。会员卡首页、登录页等
+       真实内容一律不算，避免把已经读出来的卡片信息误判成仍在读卡。 */
     var b = el('mcBody');
-    return !!(b && b.innerHTML && b.innerHTML.indexOf('正在读取会员卡') >= 0);
+    if (!b) return false;
+    var html = b.innerHTML || '';
+    return /^\s*<div class="mc-empty">\s*正在读取会员卡/.test(html) ||
+           /^\s*<div class="mc-empty">\s*正在恢复登录/.test(html);
   }
-  function stopReading(msg) {
+  function cardRendered() {
     var b = el('mcBody');
-    if (!b) return;
-    b.innerHTML = '<div class="mc-empty" style="line-height:2;text-align:center;padding:26px 12px;">' +
-      '<div style="font-size:15px;color:#3d3229;margin-bottom:12px;">' + msg + '</div>' +
-      '<button type="button" id="blReadBack" class="bl-mv-back" style="margin-top:4px;">← 返回主界面</button>' +
-      '</div>';
-    var btn = el('blReadBack');
-    if (btn && !btn.__blBound) { btn.__blBound = true; btn.addEventListener('click', backToMain); }
+    return !!(b && b.innerHTML && b.innerHTML.indexOf('mc-card-visual') >= 0);
+  }
+  function closeReadingView() {
+    /* 静默关掉卡住的读卡界面：先回主界面（#mcHost 搬回 body），再关遮罩。
+       绝不改写 #mcBody，避免覆盖已读出的会员卡信息，也不再弹「超时」文案。 */
+    if (document.body.classList.contains('bl-mode-member')) setMode(false);
+    try { if (window.MC && typeof window.MC.closePanel === 'function') window.MC.closePanel(); } catch (e) {}
+    try { document.body.style.overflow = ''; } catch (e) {}
   }
   function startReadTimer() {
     if (readStart) return;
     readStart = Date.now();
     readTimer = setTimeout(function () {
       readTimer = 0; readStart = 0;
-      if (readingText()) {
+      if (readingPlaceholder()) {
         cooldownUntil = Date.now() + 15000;
-        if (!document.body.classList.contains('bl-mode-member')) {
-          /* 主界面/管理员：遮罩不该留在这里，先关掉 */
-          try { if (window.MC && typeof window.MC.closePanel === 'function') window.MC.closePanel(); } catch (e) {}
-        }
-        stopReading('读取会员卡超时，请检查网络后重新刷卡');
+        closeReadingView();
       }
-    }, 12000);
+    }, 15000);
+  }
+  function clearReadTimer() {
+    readStart = 0;
+    if (readTimer) { clearTimeout(readTimer); readTimer = 0; }
   }
   function guardReading() {
-    var reading = readingText();
+    var reading = readingPlaceholder();
     var member = document.body.classList.contains('bl-mode-member');
+    if (cardRendered() && !member && !isAdminRoute() && Date.now() >= cooldownUntil) {
+      /* 卡片信息已渲染 → 进会员卡版块正常显示，而不是让遮罩盖住主界面 */
+      clearReadTimer();
+      setMode(true);
+      return;
+    }
     if (reading) {
       if (member) {
-        /* 会员卡版块内：正常等待读卡结果，12s 后仍挂起则兜底退出 */
+        /* 会员卡版块内：正常等待读卡结果，15s 后仍挂起则静默退出 */
         startReadTimer();
       } else if (!isAdminRoute() && Date.now() >= cooldownUntil) {
         /* 识别到会员卡 → 直接进会员卡版块，让「返回主界面」入口可见 */
@@ -2881,13 +2893,12 @@ else{setTimeout(b3Boot,900);}
         /* 管理员另算：留在主界面走原后台逻辑，仅挂超时兜底防挂起 */
         startReadTimer();
       } else {
-        /* 冷却期内：轮询带来的重复读卡直接关掉，不打扰主界面 */
+        /* 冷却期内：轮询带来的重复读卡直接关掉，不切版块、不改写内容 */
         try { if (window.MC && typeof window.MC.closePanel === 'function') window.MC.closePanel(); } catch (e) {}
-        if (readingText()) stopReading('读取会员卡超时，请稍后重新刷卡');
+        try { document.body.style.overflow = ''; } catch (e) {}
       }
     } else if (readStart) {
-      readStart = 0;
-      if (readTimer) { clearTimeout(readTimer); readTimer = 0; }
+      clearReadTimer();
     }
   }
   function backToMain() {
